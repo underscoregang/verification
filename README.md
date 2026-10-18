@@ -1,12 +1,14 @@
 # Underscore Verification on Cloudflare Workers
 
+Source layout and development guide: [Project structure](docs/architecture.md).
+
 Discord verification using HTTP interactions, Cloudflare Workers, and MongoDB's native Node.js driver. No Discord Gateway process or D1 binding is required. Cloudflare and MongoDB usage limits and billing apply to your accounts.
 
 Worker: **https://underscore-verification.peachygang.workers.dev**
 
 The deployed Worker uses MongoDB. Its collections and indexes have been initialized, and the production Worker connection has been verified. The previous D1 database is preserved. The steps below also cover future database changes and fresh deployments.
 
-## MongoDB setup and switching an existing deployment
+## MongoDB setup
 
 Use **MongoDB Atlas or a MongoDB replica set**. Transactions are required for safe moderator approvals and settings changes; a standalone `mongod` instance is insufficient.
 
@@ -21,22 +23,16 @@ npm.cmd run db:check:production
 
 Initialization creates unique indexes for social identities and pending reviews, TTL indexes for temporary records, and a schema marker. The Worker refuses database operations until initialization succeeds. Initialization is idempotent and does not delete member records. Database checks validate required indexes and transaction-capable topology.
 
-4. If you want to retain old D1 settings, verifications, and reviews, stop Discord traffic during the switch and run the optional importer **before configuring new MongoDB settings**:
-
-```powershell
-npm.cmd run db:import:d1 -- --env-file=.env.production
-```
-
-The importer reads the previous database using `wrangler.d1-legacy.jsonc`, requires empty target member/review/settings collections, and imports those collections in a transaction. It does not change D1 or write a plaintext export. Temporary OAuth sessions and interaction claims are not migrated. Do not run both old and new versions with live traffic during migration. For a fresh start, skip importing and configure the creator accounts and role again after deployment.
-
-5. Upload credentials and deploy:
+4. Upload credentials and deploy:
 
 ```powershell
 npm.cmd run secrets:upload:production
 npm.cmd run deploy
 ```
 
-For a database-only change to an existing Worker, use `npm.cmd run secrets:upload:database:production` instead of the full secret upload; it updates only MongoDB configuration and preserves the bot's existing secrets. The production Worker has no D1 binding. The legacy config and SQL migrations are retained only for source-data migration. Command definitions, OAuth callbacks, and the Worker URL are unchanged by the MongoDB switch.
+For a database-only change to an existing Worker, use `npm.cmd run secrets:upload:database:production` instead of the full secret upload; it updates only MongoDB configuration and preserves the bot's existing secrets. The production Worker has no D1 binding. Legacy SQL migrations and D1 import tooling have been removed. The previous cloud database is not deleted by removing these local files.
+
+Setup and deployment utilities are consolidated in `src/cli/manage.js`; command registration remains in `src/cli/register.js`. The npm commands below continue to work without a `scripts/` folder.
 
 ## 1. Fill in `.env`
 
