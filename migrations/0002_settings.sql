@@ -1,0 +1,9 @@
+CREATE TABLE settings (
+  key TEXT PRIMARY KEY CHECK (key IN ('TIKTOK_USERNAME', 'YOUTUBE_CHANNEL_ID', 'VERIFIED_ROLE_ID')),
+  value TEXT NOT NULL,
+  updated_by TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+ALTER TABLE members ADD COLUMN youtube_target TEXT;
+ALTER TABLE members ADD COLUMN tiktok_target TEXT;
+ALTER TABLE reviews ADD COLUMN target TEXT;

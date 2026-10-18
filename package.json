@@ -1,0 +1,36 @@
+{
+  "name": "underscore-verification",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "wrangler dev",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:check": "wrangler deploy --dry-run --outdir dist",
+    "cf:login": "wrangler login",
+    "cf:whoami": "wrangler whoami",
+    "db:create": "wrangler d1 create underscore-verification",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "db:remote": "wrangler d1 migrations apply DB --remote",
+    "secrets:upload": "node scripts/upload-secrets.js",
+    "setup:check": "node scripts/check-setup.js",
+    "register": "node src/register.js",
+    "test": "node --test",
+    "check": "node --check src/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.2"
+  },
+  "devDependencies": {
+    "miniflare": "^5.20261012.1-beta",
+    "wrangler": "^4.151.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261012.1": true
+  }
+}
