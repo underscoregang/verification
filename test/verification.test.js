@@ -1,9 +1,11 @@
 import test, { before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
-import worker from '../src/index.js';
+import { createWorker } from '../src/index.js';
+import { MongoClient } from 'mongodb';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { initializeDatabase, databaseIssues, checkDatabase, withStore } from '../src/database.js';
 import { Store } from '../src/store.js';
 import { loadConfig, configIssues, qualifies } from '../src/config.js';
 import { hash, validateProof } from '../src/security.js';
@@ -11,7 +13,8 @@ import { immediate, perform } from '../src/interactions.js';
 import { parseYoutube, resolveYoutube, configure } from '../src/settings.js';
 import { grant } from '../src/discord.js';
 
-let mf, db, store, keys, env;
+let mf, db, store, keys, env, replica, client;
+const worker = createWorker(async (env, operation) => operation(store));
 const app = '100000000000000001', guild = '100000000000000002', role = '100000000000000003', channel = '100000000000000004';
 const user = '100000000000000005', moderator = '100000000000000006';
 let serial = 100;
@@ -20,18 +23,17 @@ before(async () => {
   keys = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
   const publicKey = Buffer.from(await crypto.subtle.exportKey('raw', keys.publicKey)).toString('hex');
   env = { DISCORD_TOKEN: 'test-token', DISCORD_CLIENT_ID: app, DISCORD_PUBLIC_KEY: publicKey, DISCORD_CLIENT_SECRET: 'test-secret', DISCORD_GUILD_ID: guild, VERIFIED_ROLE_ID: role, REVIEW_CHANNEL_ID: channel, GOOGLE_CLIENT_ID: 'test-google', GOOGLE_CLIENT_SECRET: 'test-google-secret', YOUTUBE_CHANNEL_ID: `UC${'a'.repeat(22)}`, TIKTOK_USERNAME: 'underscore', VERIFICATION_POLICY: 'either', PUBLIC_URL: 'https://verification.example.com' };
-  const modules = ['index', 'config', 'store', 'security', 'discord', 'interactions', 'settings'].map(name => ({ type: 'ESModule', path: fileURLToPath(new URL(`../src/${name}.js`, import.meta.url)) }));
-  mf = new Miniflare(convertV4MiniflareOptions({ modules, compatibilityDate: '2026-10-12', d1Databases: ['DB'], bindings: env }));
-  db = await mf.getD1Database('DB');
-  // D1 exec expects one complete statement per line.
-  for (const file of readdirSync(new URL('../migrations/', import.meta.url)).filter(name => name.endsWith('.sql')).sort()) {
-    const sql = readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8');
-    for (const statement of sql.split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();
-  }
-  env.DB = db;
-  store = new Store(db);
+  const modules = [{ type: 'ESModule', path: fileURLToPath(new URL('../dist/index.js', import.meta.url)) }];
+  replica = await MongoMemoryReplSet.create({ binary: { version: '8.0.17' }, replSet: { count: 1 } });
+  env.MONGODB_URI = replica.getUri();
+  env.MONGODB_DB_NAME = 'verification_test';
+  mf = new Miniflare(convertV4MiniflareOptions({ modules, compatibilityDate: '2026-10-12', compatibilityFlags: ['nodejs_compat'], bindings: env }));
+  client = await new MongoClient(replica.getUri()).connect();
+  db = client.db('verification_test');
+  await initializeDatabase(db);
+  store = new Store(db, client);
 });
-after(async () => { mock.restoreAll(); await mf?.dispose(); });
+after(async () => { mock.restoreAll(); await mf?.dispose(); await client?.close(); await replica?.stop(); });
 async function signed(payload, timestamp = String(Math.floor(Date.now() / 1000))) {
   const body = JSON.stringify(payload);
   const signature = Buffer.from(await crypto.subtle.sign('Ed25519', keys.privateKey, new TextEncoder().encode(timestamp + body))).toString('hex');
@@ -92,6 +94,40 @@ test('real Worker runtime rejects unsigned requests and answers signed Discord P
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { type: 1 });
 });
+test('real Worker runtime connects to MongoDB with the native driver and closes its connection', async () => {
+  const result = await mf.dispatchFetch(`${env.PUBLIC_URL}/health`);
+  assert.equal(result.status, 200);
+  assert.deepEqual(await result.json(), { ready: true, databaseReady: true });
+});
+test('MongoDB indexes enforce uniqueness and use actual BSON dates for TTL cleanup', async () => {
+  await checkDatabase(store);
+  const indexes = await db.collection('members').listIndexes().toArray();
+  assert.equal(indexes.find(index => index.name === 'unique_youtube').unique, true);
+  const token = await store.session({ stage: 'start', user });
+  assert.ok((await db.collection('sessions').findOne({ _id: await hash(token) })).expires instanceof Date);
+  assert.ok(databaseIssues({}).includes('Missing MONGODB_URI'));
+});
+test('uninitialized MongoDB cannot accept bot writes', async () => {
+  let accessed = false;
+  await assert.rejects(withStore({ ...env, MONGODB_DB_NAME: 'uninitialized_test' }, () => { accessed = true; }), /Initialize MongoDB/);
+  assert.equal(accessed, false);
+});
+test('slow database connections do not delay Discord acknowledgement or opening modals', async () => {
+  let release, opened = 0;
+  const connection = new Promise((resolve, reject) => { release = reject; });
+  const slowWorker = createWorker(async () => { opened++; await connection; });
+  const tasks = [], provider = providers();
+  try {
+    const response = await slowWorker.fetch(await signed(interaction(3, { custom_id: 'youtube' })), env, { waitUntil: task => tasks.push(task) });
+    assert.deepEqual(await response.json(), { type: 5, data: { flags: 64 } });
+    const modal = await slowWorker.fetch(await signed(interaction(3, { custom_id: 'tiktok' })), env, { waitUntil: task => tasks.push(task) });
+    assert.equal((await modal.json()).type, 9);
+    assert.equal(opened, 1);
+    release(new Error('Simulated database outage'));
+    await Promise.all(tasks);
+    assert.match(JSON.parse(provider.calls[0].body).content, /MongoDB connectivity/);
+  } finally { provider.restore(); }
+});
 test('tampered and stale signed interactions cannot execute', async () => {
   const request = await signed({ type: 1 });
   const tampered = new Request(request.url, { method: 'POST', headers: request.headers, body: '{"type":2}' });
@@ -113,7 +149,7 @@ test('TikTok modal opens immediately; disabled platform buttons are denied', () 
   assert.equal(immediate(interaction(3, { custom_id: 'tiktok' }), config).type, 9);
   assert.match(immediate(interaction(3, { custom_id: 'tiktok' }), { ...config, policy: 'youtube' }).data.content, /unavailable/);
 });
-test('D1 OAuth sessions bind browser and stage, expire, and are atomically single-use', async () => {
+test('MongoDB OAuth sessions bind browser and stage, expire, and are atomically single-use', async () => {
   const token = await store.session({ user, stage: 'google', browser: 'browser-hash' });
   assert.equal(await store.consume(token, 'discord', 'browser-hash'), null);
   assert.equal(await store.consume(token, 'google', 'wrong'), null);
@@ -121,7 +157,7 @@ test('D1 OAuth sessions bind browser and stage, expire, and are atomically singl
   const results = await Promise.all([store.consume(token, 'google', 'browser-hash'), store.consume(token, 'google', 'browser-hash')]);
   assert.equal(results.filter(Boolean).length, 1);
   const expired = await store.session({ user, stage: 'start' });
-  await db.prepare('UPDATE sessions SET expires=0 WHERE hash=?').bind(await hash(expired)).run();
+  await db.collection('sessions').updateOne({ _id: await hash(expired) }, { $set: { expires: new Date(0) } });
   assert.equal(await store.consume(expired, 'start'), null);
 });
 test('YouTube interaction defers privately and replay cannot create extra sessions', async () => {
@@ -267,7 +303,7 @@ test('duplicate TikTok identity rolls back approval and preserves pending review
   assert.equal((await store.review(id)).status, 'pending');
   assert.equal(await store.member(target), null);
 });
-test('health checks configuration and migrated D1; unknown routes return 404', async () => {
+test('health checks configuration and initialized MongoDB; unknown routes return 404', async () => {
   assert.equal((await call(new Request(`${env.PUBLIC_URL}/health`))).status, 200);
   assert.equal((await call(new Request(`${env.PUBLIC_URL}/health`), {})).status, 503);
   assert.equal((await call(new Request(`${env.PUBLIC_URL}/missing`))).status, 404);

@@ -1,66 +1,80 @@
 import { hash, randomToken } from './security.js';
 
+const document = value => value ? { ...value, id: value._id } : null;
 export class Store {
-  constructor(db) { this.db = db; }
+  constructor(db, client) { this.db = db; this.client = client; }
+  async transaction(operation) {
+    const session = this.client.startSession();
+    try {
+      return await session.withTransaction(() => operation(session), {
+        readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' }, timeoutMS: 12000,
+      });
+    } finally { await session.endSession(); }
+  }
   async settings() {
-    const { results } = await this.db.prepare('SELECT key,value FROM settings').all();
-    return Object.fromEntries(results.map(({ key, value }) => [key, value]));
+    const items = await this.db.collection('settings').find({}, { projection: { value: 1 } }).toArray();
+    const allowed = ['TIKTOK_USERNAME', 'YOUTUBE_CHANNEL_ID', 'VERIFIED_ROLE_ID'];
+    return Object.fromEntries(items.filter(item => allowed.includes(item._id)).map(item => [item._id, item.value]));
   }
   async saveSetting(key, value, actor, previous) {
     if (!['TIKTOK_USERNAME', 'YOUTUBE_CHANNEL_ID', 'VERIFIED_ROLE_ID'].includes(key)) throw new Error('Invalid setting');
-    const queries = [this.db.prepare('INSERT INTO settings(key,value,updated_by,updated_at) VALUES(?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=excluded.updated_at').bind(key, value, actor, Date.now())];
-    if (value !== previous && key !== 'VERIFIED_ROLE_ID') {
-      const platform = key === 'YOUTUBE_CHANNEL_ID' ? 'youtube' : 'tiktok';
-      queries.push(this.db.prepare(`UPDATE members SET ${platform}=NULL,${platform}_target=NULL`));
-      queries.push(this.db.prepare('DELETE FROM sessions'));
-      if (platform === 'tiktok') queries.push(this.db.prepare("UPDATE reviews SET status='rejected',reviewer=?,decision_id=NULL WHERE status='pending'").bind(actor));
-    }
-    await this.db.batch(queries);
+    await this.transaction(async session => {
+      await this.db.collection('settings').updateOne({ _id: key }, { $set: { value, updated_by: actor, updated_at: new Date() } }, { upsert: true, session });
+      if (value !== previous && key !== 'VERIFIED_ROLE_ID') {
+        const platform = key === 'YOUTUBE_CHANNEL_ID' ? 'youtube' : 'tiktok';
+        await this.db.collection('members').updateMany({}, { $unset: { [platform]: '', [`${platform}_target`]: '' } }, { session });
+        await this.db.collection('sessions').deleteMany({}, { session });
+        if (platform === 'tiktok') await this.db.collection('reviews').updateMany({ status: 'pending' }, { $set: { status: 'rejected', reviewer: actor, decision_id: null } }, { session });
+      }
+    });
   }
-  member(id) { return this.db.prepare('SELECT * FROM members WHERE id=?').bind(id).first(); }
-  async verify(id, platform, identity, target = null) {
+  async member(id) {
+    const item = await this.db.collection('members').findOne({ _id: id });
+    return item ? { youtube: null, tiktok: null, ...document(item) } : null;
+  }
+  async verify(id, platform, identity, target = null, session) {
     if (!['youtube', 'tiktok'].includes(platform)) throw new Error('Invalid platform');
-    await this.db.prepare(`INSERT INTO members(id, ${platform},${platform}_target) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET ${platform}=excluded.${platform},${platform}_target=excluded.${platform}_target`).bind(id, identity, target).run();
+    await this.db.collection('members').updateOne({ _id: id }, { $set: { [platform]: identity, [`${platform}_target`]: target } }, { upsert: true, ...(session ? { session } : {}) });
   }
   async session({ stage, user, browser = null }) {
     const token = randomToken();
-    await this.db.prepare('INSERT INTO sessions(hash,stage,user,browser,expires) VALUES(?,?,?,?,?)').bind(await hash(token), stage, user, browser, Date.now() + 600000).run();
+    await this.db.collection('sessions').insertOne({ _id: await hash(token), stage, user, browser, expires: new Date(Date.now() + 600000) });
     return token;
   }
   async consume(token, stage, browser = null) {
     if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return null;
-    // Atomic DELETE RETURNING prevents replay even across Worker instances.
-    return this.db.prepare('DELETE FROM sessions WHERE hash=? AND stage=? AND expires>? AND (browser IS NULL OR browser=?) RETURNING *').bind(await hash(token), stage, Date.now(), browser).first();
+    // Atomic removal and an explicit expiry check protect against replay even
+    // when MongoDB's asynchronous TTL cleanup has not removed an expired row.
+    return this.db.collection('sessions').findOneAndDelete({ _id: await hash(token), stage, expires: { $gt: new Date() }, $or: [{ browser: null }, { browser }] });
   }
   async claimInteraction(id) {
-    return Boolean(await this.db.prepare('INSERT INTO interactions(id,expires) VALUES(?,?) ON CONFLICT(id) DO NOTHING RETURNING id').bind(id, Date.now() + 900000).first());
+    try {
+      await this.db.collection('interactions').insertOne({ _id: id, expires: new Date(Date.now() + 900000) });
+      return true;
+    } catch (error) { if (error.code === 11000) return false; throw error; }
   }
   async createReview(id, user, handle, proof, target = null) {
-    return this.db.prepare("INSERT INTO reviews(id,user,handle,proof,created_at,target) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING RETURNING *").bind(id, user, handle, proof, Date.now(), target).first();
+    const item = { _id: id, user, handle, proof, target, status: 'pending', message_id: null, created_at: new Date() };
+    try { await this.db.collection('reviews').insertOne(item); return document(item); }
+    catch (error) { if (error.code === 11000) return null; throw error; }
   }
-  review(id) { return this.db.prepare('SELECT * FROM reviews WHERE id=?').bind(id).first(); }
-  async attachReview(id, messageId) {
-    await this.db.prepare('UPDATE reviews SET message_id=? WHERE id=?').bind(messageId, id).run();
-  }
-  async failReview(id) {
-    await this.db.prepare("UPDATE reviews SET status='delivery_failed' WHERE id=? AND status='pending' AND message_id IS NULL").bind(id).run();
-  }
+  async review(id) { return document(await this.db.collection('reviews').findOne({ _id: id })); }
+  async attachReview(id, messageId) { await this.db.collection('reviews').updateOne({ _id: id }, { $set: { message_id: messageId } }); }
+  async failReview(id) { await this.db.collection('reviews').updateOne({ _id: id, status: 'pending', message_id: null }, { $set: { status: 'delivery_failed' } }); }
   async decideReview(id, user, approve, decisionId) {
-    const queries = [];
-    if (approve) queries.push(this.db.prepare(`INSERT INTO members(id,tiktok,tiktok_target)
-      SELECT user,handle,target FROM reviews WHERE id=? AND status='pending'
-      ON CONFLICT(id) DO UPDATE SET tiktok=excluded.tiktok,tiktok_target=excluded.tiktok_target`).bind(id));
-    queries.push(this.db.prepare("UPDATE reviews SET status=?,reviewer=?,decision_id=? WHERE id=? AND status='pending'").bind(approve ? 'approved' : 'rejected', user, decisionId, id));
-    // D1 batch is transactional: duplicate account failures roll back the decision.
-    await this.db.batch(queries);
-    const review = await this.review(id);
-    return review?.decision_id === decisionId ? review : null;
+    return this.transaction(async session => {
+      const review = await this.db.collection('reviews').findOneAndUpdate({ _id: id, status: 'pending' }, {
+        $set: { status: approve ? 'approved' : 'rejected', reviewer: user, decision_id: decisionId },
+      }, { returnDocument: 'after', session });
+      if (!review) return null;
+      if (approve) await this.verify(review.user, 'tiktok', review.handle, review.target, session);
+      return document(review);
+    });
   }
   async cleanup() {
-    await this.db.batch([
-      this.db.prepare('DELETE FROM sessions WHERE expires<?').bind(Date.now()),
-      this.db.prepare('DELETE FROM interactions WHERE expires<?').bind(Date.now()),
-      this.db.prepare("UPDATE reviews SET status='delivery_failed' WHERE status='pending' AND message_id IS NULL AND created_at<?").bind(Date.now() - 3600000),
-    ]);
+    const now = new Date();
+    await this.db.collection('sessions').deleteMany({ expires: { $lte: now } });
+    await this.db.collection('interactions').deleteMany({ expires: { $lte: now } });
+    await this.db.collection('reviews').updateMany({ status: 'pending', message_id: null, created_at: { $lt: new Date(Date.now() - 3600000) } }, { $set: { status: 'delivery_failed' } });
   }
 }

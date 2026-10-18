@@ -1,8 +1,8 @@
 import { loadConfig } from './config.js';
-import { Store } from './store.js';
+import { withStore, checkDatabase } from './database.js';
 import { validSignature, randomToken, hash, cookie, browserCookie } from './security.js';
 import { immediate, complete, message } from './interactions.js';
-import { api, grant } from './discord.js';
+import { api, grant, editResponse } from './discord.js';
 import { isSetup } from './settings.js';
 
 const headers = {
@@ -24,7 +24,7 @@ async function exchange(config, provider, code) {
     }),
   }, provider);
 }
-async function interactions(request, env, ctx) {
+async function interactions(request, env, ctx, openStore) {
   // Verify the exact raw body before parsing or executing any command.
   if (Number(request.headers.get('content-length')) > 65536) return text('Payload too large', 413);
   const body = await request.text();
@@ -35,18 +35,27 @@ async function interactions(request, env, ctx) {
   // Endpoint registration PING works before other bot credentials are configured.
   if (interaction.type === 1) return json({ type: 1 });
   let config;
-  const store = new Store(env.DB);
-  try { config = loadConfig({ ...env, ...await store.settings() }, { setup: isSetup(interaction) }); } catch { return json(message('The bot configuration is incomplete. Administrators can use /tiktok setup, /youtube setup, and /getrole to set creator accounts and the access role. Check remaining credentials with npm run setup:check.')); }
+  try { config = loadConfig(env, { setup: true }); } catch { return json(message('Core bot configuration is incomplete. Ask an administrator to run npm run setup:check.')); }
   if (interaction.application_id !== config.DISCORD_CLIENT_ID || interaction.guild_id !== config.DISCORD_GUILD_ID || !interaction.member?.user?.id) return json(message('Use this bot in the configured Underscore server.'));
   if (!interaction.data || !/^\d{17,20}$/.test(interaction.id) || typeof interaction.token !== 'string') return text('Invalid interaction', 400);
   const response = immediate(interaction, config);
   if (response) return json(response);
-  // Acknowledge within Discord's deadline; complete REST/D1 work in the background.
-  ctx.waitUntil(complete(interaction, config, store));
+  // Acknowledge before connecting to MongoDB; finish work in the background.
+  ctx.waitUntil((async () => {
+    try {
+      await openStore(env, async store => {
+        const effective = loadConfig({ ...env, ...await store.settings() }, { setup: isSetup(interaction) });
+        await complete(interaction, effective, store);
+      });
+    } catch (error) {
+      console.error('Database or configuration operation failed', error.name);
+      await editResponse(config, interaction, { content: 'Database or verification setup is incomplete. Ask an administrator to check MongoDB connectivity, run db:init, and configure /tiktok setup, /youtube setup, and /getrole.', components: [] }).catch(() => {});
+    }
+  })());
   return json({ type: 5, data: { flags: 64 } });
 }
-async function oauth(request, env, url) {
-  const store = new Store(env.DB), config = loadConfig({ ...env, ...await store.settings() });
+async function oauth(request, env, url, store) {
+  const config = loadConfig({ ...env, ...await store.settings() });
   if (config.policy === 'tiktok') return text('YouTube verification is disabled.', 404);
   if (url.origin !== config.baseUrl) return text('Use the configured verification domain.', 400);
   if (url.pathname === '/start') {
@@ -77,26 +86,34 @@ async function oauth(request, env, url) {
   const granted = await grant(config, store, session.user);
   return text(granted ? 'YouTube subscription verified. Your Underscore access role has been granted. You can close this tab.' : 'YouTube verified. Complete TikTok review in Discord to meet the server requirement.', 200, { 'Set-Cookie': browserCookie('', config.baseUrl, true) });
 }
-export default {
+export function createWorker(openStore = withStore) { return {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     try {
       if (url.pathname === '/interactions') {
         if (request.method !== 'POST') return text('Method not allowed', 405, { Allow: 'POST' });
-        return await interactions(request, env, ctx);
+        return await interactions(request, env, ctx, openStore);
       }
       if (request.method !== 'GET') return text('Method not allowed', 405, { Allow: 'GET' });
       if (url.pathname === '/') return text('Underscore Verification. Start with /verify in Discord. Google tokens are used only during verification and are not stored. Verification records and TikTok evidence URLs remain until removed by an administrator. Contact your server administrators for data removal.');
       if (url.pathname === '/health') {
-        try { loadConfig({ ...env, ...await new Store(env.DB).settings() }); await env.DB.prepare('SELECT id FROM members LIMIT 1').first(); return json({ ready: true }); }
-        catch { return json({ ready: false }, 503); }
+        let settings;
+        try {
+          settings = await openStore(env, async store => { await checkDatabase(store); return store.settings(); });
+        }
+        catch { return json({ ready: false, databaseReady: false }, 503); }
+        try { loadConfig({ ...env, ...settings }); return json({ ready: true, databaseReady: true }); }
+        catch { return json({ ready: false, databaseReady: true, reason: 'verification_configuration_incomplete' }, 503); }
       }
-      if (['/start', '/oauth/discord', '/oauth/google'].includes(url.pathname)) return await oauth(request, env, url);
+      if (['/start', '/oauth/discord', '/oauth/google'].includes(url.pathname)) return await openStore(env, store => oauth(request, env, url, store));
       return text('Not found', 404);
     } catch (error) {
       console.error('Verification request failed', error.name, error.status || '');
       return text('Verification could not finish. Retry /verify, or /verification-status if verification was saved. Ask an administrator to check credentials, account conflicts, and role permissions.', 502);
     }
   },
-  async scheduled(event, env, ctx) { ctx.waitUntil(new Store(env.DB).cleanup()); },
-};
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(openStore(env, store => store.cleanup()).catch(error => { console.error('MongoDB cleanup failed', error.name); }));
+  },
+}; }
+export default createWorker();

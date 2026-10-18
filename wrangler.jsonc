@@ -3,17 +3,10 @@
   "name": "underscore-verification",
   "main": "src/index.js",
   "compatibility_date": "2026-10-12",
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   // Upload configuration from .env with npm run secrets:upload.
   // Keep credentials out of this file.
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "underscore-verification",
-      "database_id": "2bd746ce-6f62-483e-adb0-51ab16a9c0e5",
-      "migrations_dir": "migrations"
-    }
-  ],
   "triggers": { "crons": ["17 * * * *"] },
   "observability": { "enabled": false }
 }
