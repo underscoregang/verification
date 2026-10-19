@@ -28,6 +28,22 @@ export const data = {
           "required": true
         }
       ]
+    },
+    {
+      "name": "logs",
+      "description": "Choose the private channel for bot logs such as server joins and leaves",
+      "type": 1,
+      "options": [
+        {
+          "name": "channel",
+          "description": "Private staff channel for bot logs",
+          "type": 7,
+          "channel_types": [
+            0
+          ],
+          "required": true
+        }
+      ]
     }
   ]
 };

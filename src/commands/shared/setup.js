@@ -62,6 +62,26 @@ export async function configure(interaction, config, store) {
     };
   const { name, options = [] } = interaction.data;
   const actor = interaction.member.user.id;
+  if (name === "channel" && options[0]?.name === "logs") {
+    const channel = options[0].options?.find(
+      (option) => option.name === "channel",
+    )?.value;
+    if (typeof channel !== "string" || !/^\d{17,20}$/.test(channel))
+      return { content: "Use `/channel logs channel:#bot-logs`." };
+    const error = await checkChannels(config, [
+      {
+        id: channel,
+        permissions: 1024n | 2048n | 16384n,
+        label: "View Channel, Send Messages and Embed Links",
+        private: true,
+      },
+    ]);
+    if (error) return { content: error };
+    await store.saveSetting("LOG_CHANNEL_ID", channel, actor);
+    return {
+      content: `Bot logs will be posted in <#${channel}>. This includes servers the bot joins or leaves; invites to other servers are left automatically.`,
+    };
+  }
   if (name === "channel") {
     const fields =
       options.find((option) => option.name === "setup")?.options || [];

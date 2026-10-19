@@ -12,6 +12,7 @@ Use these administrator commands:
 
 ```text
 /channel setup channel:#verify review-channel:#verification-review
+/channel logs channel:#bot-logs
 /getrole role:@Verified
 /youtube setup channel:UCxxxxxxxxxxxxxxxxxxxxxx
 /youtube view
@@ -24,6 +25,8 @@ Use these administrator commands:
 ```
 
 `/channel setup`, `/panel`, and creator account setup require **Manage Server**. `/getrole` and staff review buttons require **Manage Roles**. The bot rejects public staff review channels and checks its channel permissions before saving settings. It does not change your channel permissions automatically.
+
+The bot serves only the server in `DISCORD_GUILD_ID`. If anyone adds it to another server, it leaves automatically and posts the server, owner and (when the audit log is readable) the inviter to the private `/channel logs` channel, followed by a leave log. To stop other people adding it at all, turn off **Public Bot** under **Bot** in the Discord Developer Portal.
 
 `/panel` posts branded instructions and creator links. In `#verify`, the panel has no upload buttons; members send a normal image message. In another channel, it includes an **Open verification channel** button. You can omit the panel's `channel` option to post in the current channel. `/verification-panel` remains an alias.
 

@@ -29,6 +29,7 @@ export class Store {
       "VERIFIED_ROLE_ID",
       "SUBMISSION_CHANNEL_ID",
       "REVIEW_CHANNEL_ID",
+      "LOG_CHANNEL_ID",
     ];
     return Object.fromEntries(
       items
@@ -38,7 +39,7 @@ export class Store {
   }
   async saveSetting(key, value, actor, previous) {
     if (
-      !["TIKTOK_USERNAME", "YOUTUBE_CHANNEL_ID", "VERIFIED_ROLE_ID", "SUBMISSION_CHANNEL_ID", "REVIEW_CHANNEL_ID"].includes(
+      !["TIKTOK_USERNAME", "YOUTUBE_CHANNEL_ID", "VERIFIED_ROLE_ID", "SUBMISSION_CHANNEL_ID", "REVIEW_CHANNEL_ID", "LOG_CHANNEL_ID"].includes(
         key,
       )
     )

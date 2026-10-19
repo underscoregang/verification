@@ -1,6 +1,8 @@
 import { discord } from './client.js';
 import { messageCreate, RESULT_TTL } from '../events/client/MessageCreate.js';
 import { ready } from '../events/client/Ready.js';
+import { guildCreate } from '../events/guild/GuildCreate.js';
+import { guildDelete } from '../events/guild/GuildDelete.js';
 
 // One named Durable Object owns the Gateway connection for this bot.
 // Outbound WebSockets cannot hibernate; the connection incurs duration billing.
@@ -27,6 +29,19 @@ export class DiscordGateway {
     await this.ensureConnected();
     await this.drain();
     await this.cleanup();
+  }
+  // GUILD_DELETE carries only the ID, so keep the details needed for the leave log.
+  async guildCreate(guild) {
+    if (guild.unavailable) return;
+    const { id, name, member_count, owner_id } = guild;
+    await this.ctx.storage.put(`guild:${id}`, { id, name, member_count, owner_id, autoLeave: id !== this.env.DISCORD_GUILD_ID });
+    await guildCreate(guild, this.env);
+  }
+  async guildDelete(guild) {
+    if (guild.unavailable) return;
+    const known = await this.ctx.storage.get(`guild:${guild.id}`);
+    await this.ctx.storage.delete(`guild:${guild.id}`);
+    await guildDelete({ ...known, ...guild }, this.env);
   }
   // Result replies are public, so remove them shortly after posting. The stored
   // entry lets the next alarm finish the job if this object restarts first.
@@ -157,6 +172,14 @@ export class DiscordGateway {
         this.diagnostic = null;
         this.failures = 0;
         clearTimeout(this.handshake);
+      } else if (packet.t === 'GUILD_CREATE') {
+        this.ctx.waitUntil(this.guildCreate(packet.d).catch(error => {
+          console.error('Guild join handler failed', error.name, error.status || '');
+        }));
+      } else if (packet.t === 'GUILD_DELETE') {
+        this.ctx.waitUntil(this.guildDelete(packet.d).catch(error => {
+          console.error('Guild leave handler failed', error.name, error.status || '');
+        }));
       } else if (packet.t === 'MESSAGE_CREATE' && packet.d.guild_id === this.env.DISCORD_GUILD_ID &&
                  !packet.d.author?.bot && !packet.d.webhook_id && packet.d.attachments?.length) {
         this.ctx.waitUntil(this.enqueue(packet.d).catch(error => {
