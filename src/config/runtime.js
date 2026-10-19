@@ -112,3 +112,9 @@ export function qualifies(policy, record) {
           ? tiktok
           : false;
 }
+
+// Discord setup owns these values; obsolete Worker secrets must not supply defaults.
+export function withSavedSettings(env, settings = {}) {
+  const { VERIFIED_ROLE_ID, SUBMISSION_CHANNEL_ID, REVIEW_CHANNEL_ID, ...bindings } = env;
+  return { ...bindings, ...settings };
+}

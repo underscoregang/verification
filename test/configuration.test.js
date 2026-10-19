@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ConfigurationError, configurationHelp, loadConfig } from '../src/config/runtime.js';
+import { ConfigurationError, configurationHelp, loadConfig, withSavedSettings } from '../src/config/runtime.js';
 import { createWorker } from '../src/index.js';
 
 const env = {
@@ -62,4 +62,16 @@ test('signed verification click reports missing role rather than database failur
     assert.match(replies[0].content, /\/getrole role:@Verified/);
     assert.doesNotMatch(replies[0].content, /database could not/);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test('role and channels come only from persisted Discord setup settings', () => {
+ const legacy = { ...env, VERIFIED_ROLE_ID: '100000000000000004' };
+ const withoutSetup = withSavedSettings(legacy);
+ assert.equal(withoutSetup.VERIFIED_ROLE_ID, undefined);
+ assert.equal(withoutSetup.SUBMISSION_CHANNEL_ID, undefined);
+ assert.equal(withoutSetup.REVIEW_CHANNEL_ID, undefined);
+ assert.equal(withoutSetup.DISCORD_TOKEN, env.DISCORD_TOKEN);
+ const saved = { VERIFIED_ROLE_ID: '100000000000000008', SUBMISSION_CHANNEL_ID: '100000000000000009', REVIEW_CHANNEL_ID: '100000000000000010' };
+ const configured = loadConfig(withSavedSettings(legacy, saved));
+ for (const key of Object.keys(saved)) assert.equal(configured[key], saved[key]);
 });

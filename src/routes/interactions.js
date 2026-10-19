@@ -1,4 +1,4 @@
-import { loadConfig, ConfigurationError, configurationHelp } from "../config/runtime.js";
+import { withSavedSettings, loadConfig, ConfigurationError, configurationHelp } from "../config/runtime.js";
 import { validSignature } from "../shared/security.js";
 import { immediate, complete } from "../events/client/InteractionCreate.js";
 import { message } from "../components/index.js";
@@ -53,7 +53,7 @@ export async function interactions(request, env, ctx, openStore) {
       try {
         await openStore(env, async (store) => {
           const effective = loadConfig(
-            { ...env, ...(await store.settings()) },
+            withSavedSettings(env, await store.settings()),
             { setup: isSetup(interaction) },
           );
           await complete(interaction, effective, store);

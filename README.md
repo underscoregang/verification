@@ -67,9 +67,6 @@ Copy `.env.example` to `.env` for development or `.env.production` for productio
 | `MONGODB_DB_NAME` | Database name; defaults to `underscore_verification`. |
 | `PUBLIC_URL` | Public HTTPS origin serving the Worker. |
 | `VERIFICATION_POLICY` | `youtube`, `tiktok`, `either`, or `both`. |
-| `VERIFIED_ROLE_ID` | Optional default; usually set with `/getrole`. |
-| `SUBMISSION_CHANNEL_ID` | Optional default; usually set with `/channel setup`. |
-| `REVIEW_CHANNEL_ID` | Optional default; usually set with `/channel setup`. |
 | `YOUTUBE_CHANNEL_ID` | Optional default; usually set with `/youtube setup`. |
 | `YOUTUBE_API_KEY` | Optional: resolve handles/usernames during creator setup. |
 | `TIKTOK_USERNAME` | Optional default; usually set with `/tiktok setup`. |
@@ -116,3 +113,5 @@ Code layout: [Architecture guide](docs/architecture.md). Reference: [Discord fil
 Automatic screenshot checks use the Cloudflare Workers AI binding (`@cf/google/gemma-4-26b-a4b-it`). Clear images with an exact creator @handle and active Subscribed/Following state are approved automatically; ambiguous images, provider failures and timeouts stay pending for staff. YouTube automatic matching requires YOUTUBE_API_KEY to resolve the saved channel ID to its canonical handle. Screenshots are sent to Cloudflare for analysis and retained in the private Discord review channel. Image matching cannot prove account ownership or detect every forgery; claimed usernames are not independently verified. There is no Google sign-in. Workers AI usage is subject to Cloudflare quotas and pricing.
 
 See [project structure](docs/architecture.md) for command modules, HTTP interaction events and content/embed/Components V2 response builders. Creator view/help commands currently require Manage Server, like setup.
+
+Access role and submission/review channel IDs are stored only in MongoDB by `/getrole` and `/channel setup`; they are not environment variables or Worker secrets.

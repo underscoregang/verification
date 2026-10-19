@@ -1,4 +1,4 @@
-import { loadConfig } from "../config/runtime.js";
+import { withSavedSettings, loadConfig } from "../config/runtime.js";
 import { checkDatabase } from "../database/connection.js";
 import { json } from "../http/responses.js";
 
@@ -14,7 +14,7 @@ export async function health(env, openStore) {
             return json({ ready: false, databaseReady: false }, 503);
           }
           try {
-            loadConfig({ ...env, ...settings });
+            loadConfig(withSavedSettings(env, settings));
             return json({ ready: true, databaseReady: true });
           } catch {
             return json(
