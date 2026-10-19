@@ -37,7 +37,7 @@ export function panel(config, channelId) {
         : [
             row({
               type: 2,
-              style: 3,
+              style: 5,
               label: "Verification Here",
               url: channelLink(config),
             }),
