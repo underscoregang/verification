@@ -60,7 +60,8 @@ export function screenshotInput(interaction) {
 export async function screenshotFile(attachment) {
   const response = await fetch(attachment.url, {
     signal: AbortSignal.timeout(6000),
-    redirect: "error",
+    // Workers reject redirect: "error"; a manual 3xx response fails the ok check below.
+    redirect: "manual",
   });
   if (
     !response.ok ||

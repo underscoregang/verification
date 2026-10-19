@@ -2,6 +2,8 @@ import { Buffer } from "node:buffer";
 import { api } from "../http/client.js";
 
 export const visionModel = "@cf/google/gemma-4-26b-a4b-it";
+// The Gateway Durable Object stays alive, so this skips a YouTube API call per image.
+const handles = new Map();
 const normalize = (value) =>
   typeof value === "string" ? value.trim().replace(/^@/, "").toLowerCase() : "";
 
@@ -45,7 +47,10 @@ export async function scanScreenshot(config, platform, file) {
   try {
     const operation = async () => {
       let handle = config.TIKTOK_USERNAME;
-      if (platform === "youtube") {
+      const cached = handles.get(config.YOUTUBE_CHANNEL_ID);
+      if (platform === "youtube" && cached?.expires > Date.now()) {
+        handle = cached.handle;
+      } else if (platform === "youtube") {
         if (!config.YOUTUBE_API_KEY)
           return { approved: false, reason: "creator_lookup_unavailable" };
         const query = new URLSearchParams({
@@ -62,6 +67,8 @@ export async function scanScreenshot(config, platform, file) {
           (item) => item.id === config.YOUTUBE_CHANNEL_ID,
         );
         handle = channel?.snippet?.customUrl;
+        if (normalize(handle))
+          handles.set(config.YOUTUBE_CHANNEL_ID, { handle, expires: Date.now() + 3600000 });
       }
       if (!normalize(handle))
         return { approved: false, reason: "creator_handle_unavailable" };

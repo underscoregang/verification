@@ -68,7 +68,12 @@ export class DiscordGateway {
       url.protocol = 'https:';
       url.search = '?v=10&encoding=json';
       this.diagnostic = 'websocket_upgrade';
-      const response = await fetch(url, { headers: { Upgrade: 'websocket' }, signal: AbortSignal.timeout(10000) });
+      // Time out only the upgrade itself; a signal still pending later would abort the live socket.
+      const upgrade = new AbortController();
+      const upgradeTimer = setTimeout(() => upgrade.abort(), 10000);
+      let response;
+      try { response = await fetch(url, { headers: { Upgrade: 'websocket' }, signal: upgrade.signal }); }
+      finally { clearTimeout(upgradeTimer); }
       this.diagnostic = 'upgrade_status_' + response.status;
       const socket = response.webSocket;
       if (!socket) throw new Error('Gateway upgrade failed');
@@ -131,6 +136,7 @@ export class DiscordGateway {
         clearTimeout(this.handshake);
       } else if (packet.t === 'RESUMED') {
         this.connected = true;
+        this.diagnostic = null;
         this.failures = 0;
         clearTimeout(this.handshake);
       } else if (packet.t === 'MESSAGE_CREATE' && packet.d.guild_id === this.env.DISCORD_GUILD_ID &&
