@@ -9,6 +9,7 @@ const env = {
   DISCORD_CLIENT_SECRET: 'fake-discord-secret', GOOGLE_CLIENT_ID: 'fake-google',
   GOOGLE_CLIENT_SECRET: 'fake-google-secret', YOUTUBE_CHANNEL_ID: `UC${'b'.repeat(22)}`,
   REVIEW_CHANNEL_ID: '100000000000000003', TIKTOK_USERNAME: 'underscore',
+  SUBMISSION_CHANNEL_ID: '100000000000000007',
   PUBLIC_URL: 'https://example.com', VERIFICATION_POLICY: 'either',
 };
 test('missing access role produces a specific setup error without exposing credentials', () => {
@@ -24,20 +25,23 @@ test('persisted role completes verification configuration', () => {
   const config = loadConfig({ ...env, VERIFIED_ROLE_ID: '100000000000000004' });
   assert.equal(config.VERIFIED_ROLE_ID, '100000000000000004');
 });
-test('YouTube, TikTok, and OAuth setup issues have relevant instructions', () => {
+test('creator and screenshot channel setup issues have relevant instructions', () => {
   assert.match(configurationHelp(['Missing YOUTUBE_CHANNEL_ID']), /\/youtube setup/);
   assert.match(configurationHelp(['Missing TIKTOK_USERNAME']), /\/tiktok setup/);
-  assert.match(configurationHelp(['Missing GOOGLE_CLIENT_SECRET']), /Google OAuth/);
-  assert.match(configurationHelp(['Missing REVIEW_CHANNEL_ID']), /review channel/);
+  assert.match(configurationHelp(['Missing REVIEW_CHANNEL_ID']), /\/channel setup/);
+});
+test('screenshot verification does not require Google or Discord OAuth credentials', () => {
+  const config = loadConfig({ ...env, VERIFIED_ROLE_ID: '100000000000000004', GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '', DISCORD_CLIENT_SECRET: '' });
+  assert.equal(config.policy, 'either');
 });
 test('signed verification click reports missing role rather than database failure', async () => {
   const pair = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
   const bindings = { ...env, DISCORD_PUBLIC_KEY: Buffer.from(await crypto.subtle.exportKey('raw', pair.publicKey)).toString('hex') };
   const payload = {
-    type: 3, id: '100000000000000005', application_id: env.DISCORD_CLIENT_ID,
+    type: 2, id: '100000000000000005', application_id: env.DISCORD_CLIENT_ID,
     guild_id: env.DISCORD_GUILD_ID, token: 'fake-interaction-token',
     member: { user: { id: '100000000000000006' }, permissions: '0' },
-    data: { custom_id: 'youtube' },
+    data: { name: 'verify' },
   };
   const body = JSON.stringify(payload), timestamp = String(Math.floor(Date.now() / 1000));
   const signature = Buffer.from(await crypto.subtle.sign('Ed25519', pair.privateKey, new TextEncoder().encode(timestamp + body))).toString('hex');

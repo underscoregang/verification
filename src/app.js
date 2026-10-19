@@ -1,7 +1,6 @@
 import { withStore } from "./database/connection.js";
 import { text } from "./http/responses.js";
 import { interactions } from "./routes/interactions.js";
-import { oauth } from "./routes/oauth.js";
 import { health } from "./routes/health.js";
 
 export function createWorker(openStore = withStore) {
@@ -18,15 +17,13 @@ export function createWorker(openStore = withStore) {
           return text("Method not allowed", 405, { Allow: "GET" });
         if (url.pathname === "/")
           return text(
-            "Underscore Verification. Start with /verify in Discord. Google tokens are used only during verification and are not stored. Verification records and TikTok evidence URLs remain until removed by an administrator. Contact your server administrators for data removal.",
+            "Underscore Verification. Upload your subscription or follow screenshot using /verify in the Discord verification channel. Clear screenshots are checked automatically using Cloudflare Workers AI; uncertain images go to staff before the access role is granted. No Google sign-in is required. Screenshot copies stay in the staff review channel; verification records remain until removed by an administrator. Contact server staff for help or data removal.",
           );
         if (url.pathname === "/health") return await health(env, openStore);
         if (
           ["/start", "/oauth/discord", "/oauth/google"].includes(url.pathname)
         )
-          return await openStore(env, (store) =>
-            oauth(request, env, url, store),
-          );
+          return text('Verification now uses screenshot uploads in Discord. Use /verify and upload a fresh screenshot. Google sign-in is no longer required.', 410);
         return text("Not found", 404);
       } catch (error) {
         console.error(

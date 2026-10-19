@@ -39,7 +39,7 @@ async function endpoint(env) {
 }
 const command = process.argv[2];
 if (!['db:init', 'db:check', 'setup:check', 'secrets:upload', 'endpoint:setup'].includes(command)) {
-  console.error('Usage: node src/manage.js <db:init|db:check|setup:check|secrets:upload|endpoint:setup> [--env-file=.env.production] [--database-only]');
+  console.error('Usage: node src/cli/manage.js <db:init|db:check|setup:check|secrets:upload|endpoint:setup> [--env-file=.env.production] [--database-only]');
   process.exit(1);
 }
 try {

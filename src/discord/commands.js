@@ -1,5 +1,15 @@
 export const commands = [
   {
+    name: 'channel', description: 'Configure screenshot verification channels', type: 1, default_member_permissions: '32',
+    options: [{ name: 'setup', description: 'Choose the member submission and staff review channels', type: 1, options: [
+      { name: 'channel', description: 'Channel where members submit screenshots with /verify', type: 7, channel_types: [0], required: true },
+      { name: 'review-channel', description: 'Private channel for staff to approve or reject screenshots', type: 7, channel_types: [0], required: true },
+    ] }],
+  },
+  { name: 'panel', description: 'Post the screenshot verification instructions', type: 1, default_member_permissions: '32', options: [
+    { name: 'channel', description: 'Where to post the panel; defaults to this channel', type: 7, channel_types: [0, 5] },
+  ] },
+  {
     name: "tiktok",
     description: "Configure TikTok verification",
     type: 1,
@@ -61,8 +71,13 @@ export const commands = [
   },
   {
     name: "verify",
-    description: "Verify your subscription or submit TikTok evidence",
+    description: "Upload a subscription or follow screenshot for staff review",
     type: 1,
+    options: [
+      { name: 'platform', description: 'Account shown in your screenshot', type: 3, choices: [{ name: 'YouTube', value: 'youtube' }, { name: 'TikTok', value: 'tiktok' }] },
+      { name: 'screenshot', description: 'PNG, JPG or WebP image (maximum 8 MB)', type: 11 },
+      { name: 'username', description: 'Your YouTube or TikTok username shown in the screenshot', type: 3, max_length: 100 },
+    ],
   },
   {
     name: "verification-status",
@@ -74,5 +89,6 @@ export const commands = [
     description: "Post the Underscore verification panel",
     type: 1,
     default_member_permissions: "32",
+    options: [{ name: 'channel', description: 'Where to post the panel', type: 7, channel_types: [0, 5] }],
   },
 ];

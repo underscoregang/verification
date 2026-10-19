@@ -5,6 +5,10 @@
   "compatibility_date": "2026-10-12",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "ai": { "binding": "AI" },
+  "routes": [
+    { "pattern": "verification.underscoregang.xyz", "zone_name": "underscoregang.xyz", "custom_domain": true }
+  ],
   // Upload configuration from .env with npm run secrets:upload.
   // Keep credentials out of this file.
   "triggers": { "crons": ["17 * * * *"] },

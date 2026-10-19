@@ -10,23 +10,17 @@ export function configIssues(env, { setup = false } = {}) {
     "DISCORD_GUILD_ID",
     "PUBLIC_URL",
   ];
-  if (!setup) required.push("VERIFIED_ROLE_ID");
+  if (!setup) required.push("VERIFIED_ROLE_ID", "SUBMISSION_CHANNEL_ID", "REVIEW_CHANNEL_ID");
   if (policy !== "tiktok" && !setup)
-    required.push(
-      "DISCORD_CLIENT_SECRET",
-      "GOOGLE_CLIENT_ID",
-      "GOOGLE_CLIENT_SECRET",
-      "YOUTUBE_CHANNEL_ID",
-    );
+    required.push("YOUTUBE_CHANNEL_ID");
   if (policy !== "youtube" && !setup)
-    required.push("REVIEW_CHANNEL_ID", "TIKTOK_USERNAME");
+    required.push("TIKTOK_USERNAME");
   for (const key of required)
     if (!env[key]?.trim()) issues.push(`Missing ${key}`);
   for (const key of [
     "DISCORD_CLIENT_ID",
     "DISCORD_GUILD_ID",
-    ...(!setup ? ["VERIFIED_ROLE_ID"] : []),
-    ...(policy !== "youtube" && !setup ? ["REVIEW_CHANNEL_ID"] : []),
+    ...(!setup ? ["VERIFIED_ROLE_ID", "SUBMISSION_CHANNEL_ID", "REVIEW_CHANNEL_ID"] : []),
   ]) {
     if (env[key] && !/^\d{17,20}$/.test(env[key]))
       issues.push(
@@ -89,7 +83,7 @@ export function configurationHelp(issues) {
   if (includes('VERIFIED_ROLE_ID')) guidance.push('A server administrator must run `/getrole role:@Verified` (or supply the role ID). The bot role must be above the selected role.');
   if (includes('YOUTUBE_CHANNEL_ID')) guidance.push('A server administrator must set the YouTube channel with `/youtube setup channel:...`.');
   if (includes('TIKTOK_USERNAME')) guidance.push('A server administrator must set the TikTok account with `/tiktok setup username:...`.');
-  if (includes('REVIEW_CHANNEL_ID')) guidance.push('The bot owner must configure the private TikTok review channel.');
+  if (includes('REVIEW_CHANNEL_ID') || includes('SUBMISSION_CHANNEL_ID')) guidance.push('A server administrator must run `/channel setup channel:#verify review-channel:#staff-review`.');
   if (includes('GOOGLE_CLIENT')) guidance.push('The bot owner must configure the Google OAuth client credentials.');
   if (includes('DISCORD_CLIENT_SECRET')) guidance.push('The bot owner must configure the Discord OAuth client secret.');
   if (!guidance.length) guidance.push('Ask the bot owner to check the verification configuration.');

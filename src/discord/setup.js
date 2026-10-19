@@ -1,9 +1,11 @@
 import { discord } from "./client.js";
 import { hasPermission } from "../shared/security.js";
 import { resolveYoutube } from "../services/youtube.js";
+import { checkChannels } from "./channels.js";
 
 export const isSetup = (i) =>
-  i.type === 2 && ["tiktok", "youtube", "getrole"].includes(i.data?.name);
+  i.type === 2 &&
+  ["tiktok", "youtube", "getrole", "channel"].includes(i.data?.name);
 export function setupPermission(i) {
   return hasPermission(
     i.member?.permissions,
@@ -60,6 +62,48 @@ export async function configure(interaction, config, store) {
     };
   const { name, options = [] } = interaction.data;
   const actor = interaction.member.user.id;
+  if (name === "channel") {
+    const fields =
+      options.find((option) => option.name === "setup")?.options || [];
+    const submission = fields.find(
+      (option) => option.name === "channel",
+    )?.value;
+    const review = fields.find(
+      (option) => option.name === "review-channel",
+    )?.value;
+    if (
+      ![submission, review].every(
+        (value) => typeof value === "string" && /^\d{17,20}$/.test(value),
+      )
+    )
+      return {
+        content:
+          "Use `/channel setup channel:#verify review-channel:#staff-review`.",
+      };
+    if (submission === review)
+      return {
+        content:
+          "Choose a separate private staff review channel so member screenshots are not posted publicly.",
+      };
+    const error = await checkChannels(config, [
+      {
+        id: submission,
+        permissions: 1024n | 2048n,
+        label: "View Channel and Send Messages",
+      },
+      {
+        id: review,
+        permissions: 1024n | 2048n | 16384n | 32768n,
+        label: "View Channel, Send Messages, Embed Links and Attach Files",
+        private: true,
+      },
+    ]);
+    if (error) return { content: error };
+    await store.saveChannels(submission, review, actor);
+    return {
+      content: `Screenshot submissions: <#${submission}>. Staff reviews: <#${review}>.\nRun /panel in the channel where you want to post instructions. Members upload with the panel button or /verify; staff approve screenshots before access is granted.`,
+    };
+  }
   if (name === "getrole") {
     const raw = options.find((option) => option.name === "role")?.value;
     const id =

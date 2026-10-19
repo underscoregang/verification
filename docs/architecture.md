@@ -24,10 +24,8 @@ underscore-verification/
 │   ├── http/
 │   │   ├── client.js            # Provider requests, timeouts, safe errors
 │   │   ├── responses.js         # Response formatting and security headers
-│   │   └── urls.js              # URL query construction
 │   ├── routes/
 │   │   ├── interactions.js      # Signed Discord webhook ingress and deferral
-│   │   ├── oauth.js             # Discord/Google sign-in and YouTube verification
 │   │   └── health.js            # Database and configuration readiness
 │   ├── services/
 │   │   └── youtube.js           # YouTube handle/username resolution
@@ -46,7 +44,7 @@ underscore-verification/
 
 ## Request flow
 
-`index.js` exports the Worker assembled by `app.js`. The app selects an HTTP route. The Discord interaction route validates signatures and acknowledges requests before opening MongoDB connections; deferred interaction handlers perform command work. OAuth routes bind sign-in to the Discord member and browser, then record verification and grant the configured role. The health route reports database and configuration readiness separately.
+`index.js` exports the Worker assembled by `app.js`. The app selects an HTTP route. The Discord interaction route validates signatures and acknowledges requests before opening MongoDB connections. Members upload screenshots through native file-upload modals or slash-command attachments. The screenshot service validates and copies images to a private review channel. Staff approvals are saved in a MongoDB transaction before the configured access role is granted. The health route reports database and configuration readiness separately. OAuth routes have been retired.
 
 `database/connection.js` owns request-scoped MongoDB clients. `database/store.js` owns collection operations and transactions. Route and Discord modules use the store rather than issuing database queries themselves.
 
@@ -54,9 +52,14 @@ underscore-verification/
 
 - Add or rename slash commands in `discord/commands.js` and implement their behavior in `discord/interactions.js` or `discord/setup.js`. Run `npm run register` after changing definitions.
 - Adjust verification buttons and message components in `discord/components.js`.
-- Change sign-in or subscription verification in `routes/oauth.js`; change creator-account lookup in `services/youtube.js`.
+- Change screenshot validation and reuploading in `services/screenshots.js`; change creator-account lookup in `services/youtube.js`.
 - Change collections and indexes in `database/`; initialize new indexes with `npm run db:init:production` before deploying dependent code.
 - Change environment requirements or verification policy in `config/runtime.js`.
 - Change deployment/setup tooling in `cli/`. CLI modules and `config/local-env.js` are not imported into the Worker, so local filesystem reads and secrets remain outside the runtime bundle.
 
-The Worker URL, OAuth callback paths, npm commands, MongoDB collections, and saved configuration do not change as part of this reorganization.
+The screenshot rebuild retains the Worker URL, MongoDB collections, creator accounts, and access-role configuration. OAuth callbacks are retired; `/channel setup` selects the screenshot channels and `/panel` posts the new instructions.
+
+Screenshot-specific modules: `src/discord/channels.js` validates channel permissions and review privacy; `src/services/screenshots.js` validates uploaded files and copies them into Discord staff storage.
+
+
+Automatic screenshot checks use the Cloudflare Workers AI binding (`@cf/google/gemma-4-26b-a4b-it`). Clear images with an exact creator @handle and active Subscribed/Following state are approved automatically; ambiguous images, provider failures and timeouts stay pending for staff. YouTube automatic matching requires YOUTUBE_API_KEY to resolve the saved channel ID to its canonical handle. Screenshots are sent to Cloudflare for analysis and retained in the private Discord review channel. Image matching cannot prove account ownership or detect every forgery; claimed usernames are not independently verified. There is no Google sign-in. Workers AI usage is subject to Cloudflare quotas and pricing.
