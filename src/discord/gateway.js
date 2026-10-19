@@ -1,5 +1,5 @@
 import { discord } from './client.js';
-import { messageCreate } from '../events/client/MessageCreate.js';
+import { messageCreate, RESULT_TTL } from '../events/client/MessageCreate.js';
 import { ready } from '../events/client/Ready.js';
 
 // One named Durable Object owns the Gateway connection for this bot.
@@ -26,6 +26,23 @@ export class DiscordGateway {
   async alarm() {
     await this.ensureConnected();
     await this.drain();
+    await this.cleanup();
+  }
+  // Result replies are public, so remove them shortly after posting. The stored
+  // entry lets the next alarm finish the job if this object restarts first.
+  async scheduleDelete(reply) {
+    await this.ctx.storage.put(`cleanup:${reply.messageId}`, { ...reply, at: Date.now() + RESULT_TTL });
+    setTimeout(() => this.ctx.waitUntil(this.cleanup()), RESULT_TTL);
+  }
+  async cleanup() {
+    const items = await this.ctx.storage.list({ prefix: 'cleanup:', limit: 25 });
+    for (const [key, item] of items) {
+      if (item.at > Date.now()) continue;
+      await discord(this.env, `/channels/${item.channelId}/messages/${item.messageId}`, 'DELETE').catch(error => {
+        if (error.status !== 404) console.error('Result message delete failed', error.name, error.status || '');
+      });
+      await this.ctx.storage.delete(key);
+    }
   }
   async enqueue(message) {
     await this.ctx.storage.put(`message:${message.id}`, message);
@@ -41,7 +58,8 @@ export class DiscordGateway {
         if (!items.size) break;
         for (const [key, message] of items) {
           try {
-            await messageCreate(message, this.env);
+            const reply = await messageCreate(message, this.env);
+            if (reply) await this.scheduleDelete(reply);
             await this.ctx.storage.delete(key);
           } catch (error) {
             console.error('Gateway message handler failed', error.name);

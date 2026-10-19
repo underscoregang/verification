@@ -7,10 +7,12 @@ import {
 } from "../../config/runtime.js";
 import { discord } from "../../discord/client.js";
 import { ProviderError } from "../../http/client.js";
-import { enabled, row, button } from "../../components/controls.js";
+import { enabled } from "../../components/controls.js";
 import { screenshotFile, screenshotInput } from "../../services/screenshots.js";
 import { scanScreenshot } from "../../services/image-scan.js";
 import { execute } from "../../commands/verify.js";
+
+export const RESULT_TTL = 5000;
 
 export function messageSubmission(message, platform) {
   const attachment = message.attachments[0];
@@ -45,7 +47,7 @@ export async function messageCreate(message, env, openStore = withStore) {
     if (message.channel_id !== settings.SUBMISSION_CHANNEL_ID) return;
     if (!(await store.claimInteraction(`message:${message.id}`))) return;
     let responseId;
-    const respond = async (text, components = []) => {
+    const respond = async (text) => {
       const content = `<@${message.author.id}> ${text}`;
       const allowed_mentions = { parse: [], users: [message.author.id] };
       if (responseId)
@@ -53,7 +55,7 @@ export async function messageCreate(message, env, openStore = withStore) {
           env,
           `/channels/${message.channel_id}/messages/${responseId}`,
           "PATCH",
-          { content, components, allowed_mentions },
+          { content, allowed_mentions },
         );
       const response = await discord(
         env,
@@ -61,7 +63,6 @@ export async function messageCreate(message, env, openStore = withStore) {
         "POST",
         {
           content,
-          components,
           message_reference: {
             message_id: message.id,
             fail_if_not_exists: false,
@@ -73,19 +74,11 @@ export async function messageCreate(message, env, openStore = withStore) {
       );
       responseId = response.id;
     };
-    const result = await verifyMessage(message, env, store, settings, respond);
     // Channel messages cannot be ephemeral (flags 64 is interaction-only), so the
-    // public reply only carries a button; the click answers privately with the result.
-    try {
-      await store.saveResult(message.id, message.author.id, result);
-      await respond(
-        "📩 Your verification result is ready. Only you can see it.",
-        [row(button(`result:${message.author.id}:${message.id}`, "View result"))],
-      );
-    } catch (error) {
-      console.error("Private result delivery failed", error.name, error.status || "");
-      await respond(result).catch(() => {});
-    }
+    // gateway deletes this public result after RESULT_TTL.
+    await respond(await verifyMessage(message, env, store, settings, respond)).catch((error) => {
+      console.error("Result reply failed", error.name, error.status || "");
+    });
     // The review channel keeps its own copy, so remove the member's screenshot here.
     await discord(
       env,
@@ -98,6 +91,7 @@ export async function messageCreate(message, env, openStore = withStore) {
         error.status || "",
       );
     });
+    return responseId && { channelId: message.channel_id, messageId: responseId };
   });
 }
 

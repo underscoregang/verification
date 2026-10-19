@@ -35,10 +35,6 @@ export function immediate(interaction, config) {
   }
   if (type === 5 && /^image-proof:(youtube|tiktok)$/.test(data.custom_id))
     return null;
-  if (type === 3 && /^result:\d{17,20}:\d{17,20}$/.test(data.custom_id))
-    return data.custom_id.split(":")[1] === interaction.member.user.id
-      ? null
-      : message("This result belongs to another member. Post your own screenshot to get yours.");
   if (type === 3 && /^(approve|reject):\d{17,20}$/.test(data.custom_id))
     return hasPermission(interaction.member.permissions, 268435456n)
       ? null
@@ -47,21 +43,6 @@ export function immediate(interaction, config) {
     "This verification action has changed. Use /verify to upload a fresh screenshot.",
   );
 }
-// Shows a direct-upload result privately (Dismiss message), then removes the public note.
-async function viewResult(interaction, config, store) {
-  const [, user, id] = interaction.data.custom_id.split(":");
-  const result = await store.result(id, user);
-  if (!result)
-    return { content: "This result has expired. Please post a new screenshot." };
-  if (interaction.message?.author?.id === config.DISCORD_CLIENT_ID)
-    await discord(
-      config,
-      `/channels/${interaction.channel_id}/messages/${interaction.message.id}`,
-      "DELETE",
-    ).catch(() => {});
-  return { content: result.content };
-}
-
 export async function perform(interaction, config, store) {
   const user = interaction.member.user.id,
     data = interaction.data;
@@ -72,8 +53,6 @@ export async function perform(interaction, config, store) {
       : { content: "Unknown command. Use /verify." };
   }
   if (interaction.type === 5) return verify(interaction, config, store);
-  if (interaction.type === 3 && data.custom_id.startsWith("result:"))
-    return viewResult(interaction, config, store);
   if (
     interaction.type !== 3 ||
     !hasPermission(interaction.member.permissions, 268435456n)
