@@ -7,7 +7,7 @@ import {
 } from "../../config/runtime.js";
 import { discord } from "../../discord/client.js";
 import { ProviderError } from "../../http/client.js";
-import { enabled } from "../../components/controls.js";
+import { enabled, row, button } from "../../components/controls.js";
 import { screenshotFile, screenshotInput } from "../../services/screenshots.js";
 import { scanScreenshot } from "../../services/image-scan.js";
 import { execute } from "../../commands/verify.js";
@@ -45,9 +45,7 @@ export async function messageCreate(message, env, openStore = withStore) {
     if (message.channel_id !== settings.SUBMISSION_CHANNEL_ID) return;
     if (!(await store.claimInteraction(`message:${message.id}`))) return;
     let responseId;
-    // Channel messages cannot be ephemeral (flags 64 is interaction-only), so the
-    // result stays in the verify channel and pings the member.
-    const respond = async (text) => {
+    const respond = async (text, components = []) => {
       const content = `<@${message.author.id}> ${text}`;
       const allowed_mentions = { parse: [], users: [message.author.id] };
       if (responseId)
@@ -55,7 +53,7 @@ export async function messageCreate(message, env, openStore = withStore) {
           env,
           `/channels/${message.channel_id}/messages/${responseId}`,
           "PATCH",
-          { content, allowed_mentions },
+          { content, components, allowed_mentions },
         );
       const response = await discord(
         env,
@@ -63,6 +61,7 @@ export async function messageCreate(message, env, openStore = withStore) {
         "POST",
         {
           content,
+          components,
           message_reference: {
             message_id: message.id,
             fail_if_not_exists: false,
@@ -74,7 +73,19 @@ export async function messageCreate(message, env, openStore = withStore) {
       );
       responseId = response.id;
     };
-    await verifyMessage(message, env, store, settings, respond);
+    const result = await verifyMessage(message, env, store, settings, respond);
+    // Channel messages cannot be ephemeral (flags 64 is interaction-only), so the
+    // public reply only carries a button; the click answers privately with the result.
+    try {
+      await store.saveResult(message.id, message.author.id, result);
+      await respond(
+        "📩 Your verification result is ready. Only you can see it.",
+        [row(button(`result:${message.author.id}:${message.id}`, "View result"))],
+      );
+    } catch (error) {
+      console.error("Private result delivery failed", error.name, error.status || "");
+      await respond(result).catch(() => {});
+    }
     // The review channel keeps its own copy, so remove the member's screenshot here.
     await discord(
       env,
@@ -97,26 +108,23 @@ function failureReason(step, error) {
   return `${step}: ${error.name === "Error" ? error.message : error.name}`;
 }
 
+// Returns the member's result text; respond is used only for the progress message.
 async function verifyMessage(message, env, store, settings, respond) {
   let step = "setup";
   try {
     const config = loadConfig(withSavedSettings(env, settings));
     if (message.attachments.length !== 1)
-      return respond("❌ **Failed.** Please send one screenshot at a time.");
+      return "❌ **Failed.** Please send one screenshot at a time.";
     const interaction = messageSubmission(
       message,
       config.policy === "tiktok" ? "tiktok" : "youtube",
     );
     const input = screenshotInput(interaction);
     if (input.error)
-      return respond(
-        "❌ **Failed.** Please upload a PNG, JPG or WebP screenshot (up to 8 MB) directly to Discord.",
-      );
+      return "❌ **Failed.** Please upload a PNG, JPG or WebP screenshot (up to 8 MB) directly to Discord.";
     const pending = await store.latestReview(message.author.id);
     if (pending?.status === "pending")
-      return respond(
-        "🕵️ Your last screenshot is still waiting for staff review. You'll get the role once it's approved, so there's no need to send it again.",
-      );
+      return "🕵️ Your last screenshot is still waiting for staff review. You'll get the role once it's approved, so there's no need to send it again.";
     await respond("⏳ Processing your screenshot…");
     step = "download";
     const file = await screenshotFile(input.attachment);
@@ -129,27 +137,19 @@ async function verifyMessage(message, env, store, settings, respond) {
         scan = await scanScreenshot(config, platform, file);
       } else if (!scan.platform) {
         // Never guess a platform or award a role when the scanner cannot read it.
-        return respond(
-          "❌ **Failed.** I couldn't tell whether this is a YouTube or TikTok screenshot. Please send a clear screenshot of the creator's page showing Subscribed or Following.",
-        );
+        return "❌ **Failed.** I couldn't tell whether this is a YouTube or TikTok screenshot. Please send a clear screenshot of the creator's page showing Subscribed or Following.";
       }
     }
     if (
       (scan.platform && !enabled(config, scan.platform)) ||
       !enabled(config, platform)
     )
-      return respond(
-        "❌ **Failed.** This platform isn't used for verification on this server.",
-      );
+      return "❌ **Failed.** This platform isn't used for verification on this server.";
     const action = platform === "youtube" ? "Subscribed" : "Following";
     if (scan.reason === "wrong_creator")
-      return respond(
-        `❌ **Failed.** This screenshot shows a different account. Please send a screenshot of **@${scan.handle}** showing **${action}**.`,
-      );
+      return `❌ **Failed.** This screenshot shows a different account. Please send a screenshot of **@${scan.handle}** showing **${action}**.`;
     if (scan.reason === "not_subscribed")
-      return respond(
-        `❌ **Failed.** Your screenshot doesn't show **${action}** on **@${scan.handle}** yet. ${platform === "youtube" ? "Subscribe" : "Follow"}, then send a new screenshot.`,
-      );
+      return `❌ **Failed.** Your screenshot doesn't show **${action}** on **@${scan.handle}** yet. ${platform === "youtube" ? "Subscribe" : "Follow"}, then send a new screenshot.`;
     interaction.data.options[0].value = platform;
     step = "review";
     const result = await execute(interaction, config, store, {
@@ -157,14 +157,12 @@ async function verifyMessage(message, env, store, settings, respond) {
       scan,
       direct: true,
     });
-    await respond(result.content);
+    return result.content;
   } catch (error) {
     const reason = failureReason(step, error);
     console.error("Direct screenshot verification failed", reason);
-    await respond(
-      error instanceof ConfigurationError
-        ? configurationHelp(error.issues)
-        : `❌ **Failed.** Something went wrong while checking your image. Please try again in a moment, or contact staff if it keeps happening. (${reason})`,
-    ).catch(() => {});
+    return error instanceof ConfigurationError
+      ? configurationHelp(error.issues)
+      : `❌ **Failed.** Something went wrong while checking your image. Please try again in a moment, or contact staff if it keeps happening. (${reason})`;
   }
 }

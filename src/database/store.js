@@ -130,6 +130,22 @@ export class Store {
       throw error;
     }
   }
+  // Results for direct uploads wait here until the member opens them privately.
+  // The interactions collection already expires rows by TTL and in cleanup().
+  async saveResult(id, user, content) {
+    await this.db.collection("interactions").updateOne(
+      { _id: `result:${id}` },
+      { $set: { user, content, expires: new Date(Date.now() + 86400000) } },
+      { upsert: true },
+    );
+  }
+  async result(id, user) {
+    return this.db.collection("interactions").findOne({
+      _id: `result:${id}`,
+      user,
+      expires: { $gt: new Date() },
+    });
+  }
   async createReview(id, user, handle, proof, target = null) {
     const item = {
       _id: id,
