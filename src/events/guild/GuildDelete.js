@@ -9,12 +9,16 @@ export async function guildDelete(guild, env, openStore) {
     console.error("Bot was removed from the home server", guild.id);
     return;
   }
-  return sendLog(env, {
-    color: logColors.warning,
-    title: "Left server",
-    description: guild.autoLeave
-      ? "Left automatically because this server is not authorized."
-      : "The bot was removed from this server.",
-    fields: guildFields(guild),
-  }, openStore);
+  return sendLog(
+    env,
+    {
+      color: logColors.warning,
+      title: "Left server",
+      description: guild.autoLeave
+        ? "Left automatically because this server is not authorized."
+        : "The bot was removed from this server.",
+      fields: guildFields(guild),
+    },
+    openStore,
+  );
 }
