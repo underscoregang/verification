@@ -1,10 +1,15 @@
-import { commandHandlers } from '../../commands/index.js';
-import { execute as verify } from '../../commands/verify.js';
-import { hasPermission } from '../../shared/security.js';
-import { discord, editResponse } from '../../discord/client.js';
-import { grant } from '../../discord/roles.js';
-import { isSetup, setupPermission } from '../../commands/shared/setup.js';
-import { message, enabled, target, screenshotModal } from '../../components/index.js';
+import { commandHandlers } from "../../commands/index.js";
+import { execute as verify } from "../../commands/verify.js";
+import { hasPermission } from "../../shared/security.js";
+import { discord, editResponse } from "../../discord/client.js";
+import { grant } from "../../discord/roles.js";
+import { isSetup, setupPermission } from "../../commands/shared/setup.js";
+import {
+  message,
+  enabled,
+  target,
+  screenshotModal,
+} from "../../components/index.js";
 
 export function immediate(interaction, config) {
   const { type, data } = interaction;
@@ -43,7 +48,9 @@ export async function perform(interaction, config, store) {
     data = interaction.data;
   if (interaction.type === 2) {
     const command = commandHandlers.get(data.name);
-    return command ? command(interaction, config, store) : { content: 'Unknown command. Use /verify.' };
+    return command
+      ? command(interaction, config, store)
+      : { content: "Unknown command. Use /verify." };
   }
   if (interaction.type === 5) return verify(interaction, config, store);
   if (
