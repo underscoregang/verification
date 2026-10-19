@@ -5,7 +5,9 @@
   "compatibility_date": "2026-10-12",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  "ai": { "binding": "AI" },
+  "ai": { "binding": "AI", "remote": true },
+  // MongoDB's connection-string parser only needs the native URL class.
+  "alias": { "whatwg-url": "./src/shims/whatwg-url.js" },
   "durable_objects": { "bindings": [{ "name": "DISCORD_GATEWAY", "class_name": "DiscordGateway" }] },
   "migrations": [{ "tag": "gateway-v1", "new_sqlite_classes": ["DiscordGateway"] }],
   "routes": [

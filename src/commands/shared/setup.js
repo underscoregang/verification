@@ -88,8 +88,8 @@ export async function configure(interaction, config, store) {
     const error = await checkChannels(config, [
       {
         id: submission,
-        permissions: 1024n | 2048n,
-        label: "View Channel and Send Messages",
+        permissions: 1024n | 2048n | 8192n,
+        label: "View Channel, Send Messages and Manage Messages",
       },
       {
         id: review,
