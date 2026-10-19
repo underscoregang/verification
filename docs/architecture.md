@@ -6,6 +6,8 @@ src/
   app.js                           HTTP routing and scheduled cleanup
   events/client/
     InteractionCreate.js           Command dispatch, buttons, modals, deferred completion
+    MessageCreate.js               Direct image uploads and in-channel results
+    Ready.js                       Gateway session identity validation
   commands/
     index.js                       Explicit command registry for Worker bundling
     verify.js                      Screenshot submission and automatic checks
@@ -43,9 +45,9 @@ src/
 
 The HTTP route validates Discord signatures and acknowledges interactions before opening MongoDB. InteractionCreate dispatches slash commands through the explicit registry; button and modal events share the same signed route. Each command exports its Discord definition as data and its handler as execute. Creator commands dispatch setup, view and help from their own folders. Register definitions after changes with npm run register.
 
-This deployment receives Discord interactions over HTTP, without a persistent Gateway client. Discord Gateway Ready and MessageCreate events are not received here, so no inactive handlers are included. Normal channel image messages do not trigger verification: members submit through /verify or the panel upload buttons. A future Gateway adapter would need its own persistent runtime and could reuse commands, services and UI builders. The /health endpoint reports Worker/database readiness.
+Slash commands continue to arrive through signed HTTP interactions. A named DiscordGateway Durable Object also maintains an outbound Gateway connection, receives Ready and MessageCreate, and forwards normal screenshots to the same verification service. It uses a persistent event queue, heartbeats, session resume, reconnect backoff and alarm supervision. Direct messages are filtered by server/channel and bot/webhook identity before verification. Gateway connection duration is billable; outbound WebSockets cannot hibernate. /health checks database/configuration, while the authenticated /internal/gateway endpoint reports the listener connection.
 
-UI builders keep plain content, legacy embeds and Components V2 separate. Components V2 help uses flag 32768 and text/container components without legacy content or embeds. Existing panels retain their embeds and working upload buttons.
+UI builders keep plain content, legacy embeds and Components V2 separate. Components V2 help uses flag 32768 and text/container components without legacy content or embeds. Verification panels retain their embeds, remove upload buttons in the submission channel, and explain normal image uploads.
 
 Screenshot copies are stored in the private Discord review channel. Cloudflare Workers AI scans clear creator handles and subscription/follow states, with uncertain results and provider failures left for staff. Approval is persisted transactionally before awarding a role. Image matching cannot prove account ownership or reliably detect every forgery. YouTube automatic checks need YOUTUBE_API_KEY to resolve the canonical creator handle.
 

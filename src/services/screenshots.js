@@ -111,7 +111,7 @@ export async function screenshotFile(attachment) {
       : webp
         ? "image/webp"
         : null;
-  if (!extension || contentType !== attachment.content_type)
+  if (!extension)
     throw new Error("Invalid screenshot image");
   return {
     filename: `proof.${extension}`,

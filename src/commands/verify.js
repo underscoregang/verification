@@ -46,7 +46,7 @@ const openChannel = (config) =>
     url: channelLink(config),
   });
 
-export async function execute(interaction, config, store) {
+export async function execute(interaction, config, store, prepared = {}) {
   const user = interaction.member.user.id, data = interaction.data;
   if (
     interaction.type === 2 &&
@@ -60,8 +60,8 @@ export async function execute(interaction, config, store) {
       };
     return {
       content:
-        "Choose a platform, enter your username and attach a clear screenshot. Clear screenshots are checked automatically; uncertain images go to staff. No Google sign-in is needed.",
-      components: [choices(config)],
+        "Post one clear screenshot directly in this channel. The bot will reply with the verification result. No Google sign-in is needed.",
+      components: [],
     };
   }
   const isSubmission =
@@ -118,7 +118,7 @@ export async function execute(interaction, config, store) {
           "You already have a pending screenshot. Please wait for staff review before submitting another.",
       };
     try {
-      const file = await screenshotFile(input.attachment);
+      const file = prepared.file || await screenshotFile(input.attachment);
       const creator =
         platform === "youtube"
           ? `https://www.youtube.com/channel/${review.target}`
@@ -127,7 +127,7 @@ export async function execute(interaction, config, store) {
         config,
         config.REVIEW_CHANNEL_ID,
         {
-          content: `**${platform === "youtube" ? "YouTube" : "TikTok"} screenshot review**\nMember: <@${user}>\nClaimed account: @${input.username}\nRequired creator: ${creator}\nAutomatic image check in progress. Uncertain evidence needs staff review. Screenshots cannot prove account ownership.`,
+          content: `**${platform === "youtube" ? "YouTube" : "TikTok"} screenshot review**\nMember: <@${user}>\nAccount: ${prepared.direct ? 'not supplied (direct screenshot upload)' : '@' + input.username}\nRequired creator: ${creator}\nAutomatic image check in progress. Uncertain evidence needs staff review. Screenshots cannot prove account ownership.`,
           embeds: [
             {
               color: 0x8b5cf6,
@@ -144,13 +144,13 @@ export async function execute(interaction, config, store) {
               button(`reject:${review.id}`, "Reject", 4),
             ),
           ],
-          nonce: review.id,
+          nonce: `r:${review.id}`,
           enforce_nonce: true,
         },
         file,
       );
       await store.attachReview(review.id, sent.id, sent.attachments?.[0]?.url);
-      const scan = await scanScreenshot(config, platform, file);
+      const scan = prepared.scan || await scanScreenshot(config, platform, file);
       await store.db.collection('reviews').updateOne({ _id: review.id }, { $set: { scan: { ...scan, checked_at: new Date() } } });
       if (scan.approved) {
         const decided = await store.decideReview(review.id, config.DISCORD_CLIENT_ID, true, 'image-scan:' + review.id);

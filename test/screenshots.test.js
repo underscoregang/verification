@@ -7,6 +7,7 @@ import { Store } from '../src/database/store.js';
 import { immediate, perform, complete } from '../src/events/client/InteractionCreate.js';
 import { screenshotInput, screenshotFile } from '../src/services/screenshots.js';
 import { panel } from '../src/components/index.js';
+import { messageCreate } from '../src/events/client/MessageCreate.js';
 import { commands } from '../src/commands/index.js';
 
 const id = suffix => `100000000000000${suffix.toString().padStart(3, '0')}`;
@@ -76,7 +77,8 @@ test('panel has creator links, screenshot instructions, and correct channel navi
   assert.match(outside.embeds[0].description, /Automatic screenshot check/);
   assert.match(outside.embeds[0].description, /No Google sign-in/);
   assert.match(outside.components[0].components[0].url, new RegExp(config.SUBMISSION_CHANNEL_ID));
-  assert.equal(panel(config, config.SUBMISSION_CHANNEL_ID).components[0].components[0].custom_id, 'proof:youtube');
+  assert.deepEqual(panel(config, config.SUBMISSION_CHANNEL_ID).components, []);
+  assert.match(panel(config, config.SUBMISSION_CHANNEL_ID).embeds[0].description, /normal image message/);
   assert.match(panel({ ...config, policy: 'both' }, id(90)).embeds[0].description, /Complete both/);
 });
 test('modal and slash attachments validate Discord image metadata and reject external links', () => {
@@ -214,3 +216,39 @@ test('changing YouTube target rejects old pending YouTube screenshots', async ()
     assert.ok(!provider.calls.some(call => call.method === 'PUT'));
   } finally { provider.restore(); }
  });
+
+test('direct image posts reply with approval, award the role once and ignore replay', async () => {
+ const provider = providers();
+ try {
+  const memberId = id(820), source = { id: id(821), guild_id: config.DISCORD_GUILD_ID, channel_id: config.SUBMISSION_CHANNEL_ID, author: { id: memberId }, attachments: [attachment] };
+  const env = { ...config, PUBLIC_URL: 'https://example.com', DISCORD_PUBLIC_KEY: 'a'.repeat(64), VERIFICATION_POLICY: 'tiktok', AI: { run: async () => ({ response: JSON.stringify({ platform: 'tiktok', creator_handle: '@underscore', status: 'Following', clear: true, suspicious: false, confidence: 0.99 }) }) } };
+  const saved = { SUBMISSION_CHANNEL_ID: config.SUBMISSION_CHANNEL_ID, REVIEW_CHANNEL_ID: config.REVIEW_CHANNEL_ID, VERIFIED_ROLE_ID: config.VERIFIED_ROLE_ID };
+  const open = async (env, operation) => { const original = store.settings; store.settings = async () => saved; try { return await operation(store); } finally { store.settings = original; } };
+  await messageCreate(source, env, open);
+  const review = await store.review(source.id); assert.equal(review.status, 'approved');
+  const replies = provider.calls.filter(call => call.method === 'PATCH').map(call => JSON.parse(call.body));
+  assert.ok(replies.some(reply => /approved automatically/.test(reply.content)));
+  assert.equal(provider.calls.filter(call => call.method === 'PUT').length, 1);
+  const posts = provider.calls.filter(call => call.method === 'POST' && call.url.pathname.endsWith('/messages'));
+  const nonces = posts.map(call => call.body instanceof FormData ? JSON.parse(call.body.get('payload_json')).nonce : JSON.parse(call.body).nonce);
+  assert.equal(new Set(nonces).size, nonces.length);
+  await messageCreate(source, env, open);
+  assert.equal(provider.calls.filter(call => call.method === 'PUT').length, 1);
+ } finally { provider.restore(); }
+});
+test('direct listener ignores bots, webhooks, other guilds and channels', async () => {
+ let opened = 0;
+ const open = async (env, operation) => { opened++; return operation({ settings: async () => ({ SUBMISSION_CHANNEL_ID: config.SUBMISSION_CHANNEL_ID }) }); };
+ const source = { id: id(830), guild_id: config.DISCORD_GUILD_ID, channel_id: id(831), author: { id: id(832) }, attachments: [attachment] };
+ for (const patch of [{ author: { id: id(832), bot: true } }, { webhook_id: id(833) }, { guild_id: id(834) }, { attachments: [] }]) await messageCreate({ ...source, ...patch }, config, open);
+ assert.equal(opened, 0);
+ await messageCreate(source, config, open); assert.equal(opened, 1);
+});
+
+test('Discord-transcoded images use validated bytes rather than stale attachment MIME', async () => {
+ const provider = providers();
+ try {
+  const file = await screenshotFile({ ...attachment, content_type: 'image/webp' });
+  assert.equal(file.blob.type, 'image/png'); assert.equal(file.filename, 'proof.png');
+ } finally { provider.restore(); }
+});

@@ -6,6 +6,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "ai": { "binding": "AI" },
+  "durable_objects": { "bindings": [{ "name": "DISCORD_GATEWAY", "class_name": "DiscordGateway" }] },
+  "migrations": [{ "tag": "gateway-v1", "new_sqlite_classes": ["DiscordGateway"] }],
   "routes": [
     { "pattern": "verification.underscoregang.xyz", "zone_name": "underscoregang.xyz", "custom_domain": true }
   ],

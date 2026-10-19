@@ -1,6 +1,6 @@
 # Underscore Screenshot Verification
 
-Discord screenshot verification on Cloudflare Workers and MongoDB. Members subscribe to your YouTube channel or follow your TikTok account, attach a screenshot inside Discord, and receive automatic approval for clear matches. Uncertain screenshots go to staff. No Google sign-in, OAuth consent screen, or Google OAuth credentials are required.
+Discord screenshot verification on Cloudflare Workers and MongoDB. Members subscribe to your YouTube channel or follow your TikTok account, post a screenshot directly in the configured verification channel, and receive automatic approval for clear matches. Uncertain screenshots go to staff. No Google sign-in, OAuth consent screen, or Google OAuth credentials are required.
 
 Screenshots cannot reliably prove account ownership or a genuine subscription by themselves. This bot uses **automatic image checks with staff fallback**, then grants the configured role after approval. It does not independently verify the claimed account or detect every forged image.
 
@@ -25,7 +25,7 @@ Use these administrator commands:
 
 `/channel setup`, `/panel`, and creator account setup require **Manage Server**. `/getrole` and staff review buttons require **Manage Roles**. The bot rejects public staff review channels and checks its channel permissions before saving settings. It does not change your channel permissions automatically.
 
-`/panel` posts branded instructions and creator links. In `#verify`, the panel includes screenshot upload buttons. In another channel, it includes an **Open verification channel** button. You can omit the panel's `channel` option to post in the current channel. `/verification-panel` remains an alias.
+`/panel` posts branded instructions and creator links. In `#verify`, the panel has no upload buttons; members send a normal image message. In another channel, it includes an **Open verification channel** button. You can omit the panel's `channel` option to post in the current channel. `/verification-panel` remains an alias.
 
 `/youtube setup` accepts a channel ID, username, handle, or supported YouTube channel URL. Username/handle lookup requires `YOUTUBE_API_KEY`; a `UC...` channel ID does not. This lookup is used only for administrator setup, not member sign-in.
 
@@ -33,19 +33,19 @@ Use these administrator commands:
 
 1. Subscribe or follow using the panel's creator links.
 2. Take a clear screenshot showing the correct creator and **Subscribed** or **Following** status.
-3. In `#verify`, click an upload button, enter your account username, and attach the screenshot. Alternatively, run `/verify` to display the buttons.
+3. Send one screenshot directly in `#verify`. The bot detects the platform and replies with the result.
 4. Clear matches are approved automatically. Staff approve or reject uncertain screenshots in the private review channel. Once approved and the policy is satisfied, the bot grants the access role.
 
 PNG, JPG, and WebP screenshots up to **8 MB** are accepted. The bot validates file metadata and image signatures and reuploads the image into the staff channel, so temporary upload URLs do not make pending evidence disappear.
 
-Clients that cannot open the upload modal can use the slash-command attachment fallback:
+For screenshots the bot cannot identify, use the slash-command attachment fallback:
 
 ```text
 /verify platform:youtube screenshot:<attach image> username:yourusername
 /verify platform:tiktok screenshot:<attach image> username:yourusername
 ```
 
-**Posting a normal image message by itself does not submit verification.** This Worker receives Discord commands, buttons, and modal submissions over HTTP. Members must use the upload button or `/verify` attachment option. They do not need to host screenshots or paste image URLs.
+**Normal image messages in the configured verification channel submit verification automatically.** No button, external image host or pasted URL is required.
 
 Members can use `/verification-status` to check pending/rejected/approved submissions and retry a failed role grant. One pending screenshot per member is allowed. Rejected members may submit another image. Staff cannot approve their own proof, and only the original review message can approve its associated submission. Concurrent decisions and repeated button clicks cannot grant approval twice.
 
@@ -115,3 +115,10 @@ Automatic screenshot checks use the Cloudflare Workers AI binding (`@cf/google/g
 See [project structure](docs/architecture.md) for command modules, HTTP interaction events and content/embed/Components V2 response builders. Creator view/help commands currently require Manage Server, like setup.
 
 Access role and submission/review channel IDs are stored only in MongoDB by `/getrole` and `/channel setup`; they are not environment variables or Worker secrets.
+
+
+## Direct image uploads
+
+Enable **Message Content Intent** under Bot in Discord Developer Portal. A named Cloudflare Durable Object maintains the Discord Gateway connection and listens for member images in the MongoDB-configured submission channel. The bot replies to each image with checking, approved, staff-review or retry instructions. Only one PNG/JPG/WebP up to 8 MB per message is accepted. Bots, webhooks, other servers and other channels are ignored. Platform detection reads the screenshot; unreadable platforms can use the slash attachment fallback. `/verify` with no options gives direct upload instructions; existing slash attachment/modal submissions remain compatible.
+
+The Gateway uses heartbeats, resume/reconnect, backoff and an alarm supervisor. Fatal token/intent errors stop reconnection attempts. Outgoing WebSockets cannot hibernate and incur Cloudflare Durable Object duration charges. Queued message metadata is temporarily stored in the Durable Object until processed, then deleted. The hourly cron restarts the listener if needed. An authenticated POST to `/internal/gateway` with the bot token as Bearer authorization starts/checks the listener; never share that token. Public `/health` remains the database/configuration check.

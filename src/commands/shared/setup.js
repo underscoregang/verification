@@ -101,7 +101,7 @@ export async function configure(interaction, config, store) {
     if (error) return { content: error };
     await store.saveChannels(submission, review, actor);
     return {
-      content: `Screenshot submissions: <#${submission}>. Staff reviews: <#${review}>.\nRun /panel in the channel where you want to post instructions. Members upload with the panel button or /verify; clear images are checked automatically and uncertain images go to staff.`,
+      content: `Screenshot submissions: <#${submission}>. Staff reviews: <#${review}>.\nRun /panel in the channel where you want to post instructions. Members post screenshots directly in the submission channel; clear images are checked automatically and uncertain images go to staff.`,
     };
   }
   if (name === "getrole") {

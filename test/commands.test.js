@@ -19,7 +19,7 @@ test('creator help returns Components V2 without mixing legacy fields', async ()
   const response = await perform(interaction(name, 'help'), config, {});
   assert.equal(response.flags, 32768); assert.equal(response.components[0].type, 17);
   assert.equal(response.components[0].components[0].type, 10);
-  assert.match(response.components[0].components[0].content, /\/verify/);
+  assert.match(response.components[0].components[0].content, /verification channel/);
   assert.ok(!('content' in response)); assert.ok(!('embeds' in response));
  }
 });
