@@ -75,9 +75,30 @@ export function configIssues(env, { setup = false } = {}) {
   }
   return issues;
 }
+export class ConfigurationError extends Error {
+  constructor(issues) {
+    super('Verification configuration is incomplete');
+    this.name = 'ConfigurationError';
+    this.issues = issues;
+  }
+}
+
+export function configurationHelp(issues) {
+  const guidance = [];
+  const includes = key => issues.some(issue => issue.includes(key));
+  if (includes('VERIFIED_ROLE_ID')) guidance.push('A server administrator must run `/getrole role:@Verified` (or supply the role ID). The bot role must be above the selected role.');
+  if (includes('YOUTUBE_CHANNEL_ID')) guidance.push('A server administrator must set the YouTube channel with `/youtube setup channel:...`.');
+  if (includes('TIKTOK_USERNAME')) guidance.push('A server administrator must set the TikTok account with `/tiktok setup username:...`.');
+  if (includes('REVIEW_CHANNEL_ID')) guidance.push('The bot owner must configure the private TikTok review channel.');
+  if (includes('GOOGLE_CLIENT')) guidance.push('The bot owner must configure the Google OAuth client credentials.');
+  if (includes('DISCORD_CLIENT_SECRET')) guidance.push('The bot owner must configure the Discord OAuth client secret.');
+  if (!guidance.length) guidance.push('Ask the bot owner to check the verification configuration.');
+  return `Verification setup is incomplete.\n${guidance.join('\n')}\nAfter setup, retry /verify.`;
+}
+
 export function loadConfig(env, options) {
   const issues = configIssues(env, options);
-  if (issues.length) throw new Error(issues.join("\n"));
+  if (issues.length) throw new ConfigurationError(issues);
   return {
     ...env,
     policy: env.VERIFICATION_POLICY || "either",

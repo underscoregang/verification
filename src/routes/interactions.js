@@ -1,4 +1,4 @@
-import { loadConfig } from "../config/runtime.js";
+import { loadConfig, ConfigurationError, configurationHelp } from "../config/runtime.js";
 import { validSignature } from "../shared/security.js";
 import { immediate, complete } from "../discord/interactions.js";
 import { message } from "../discord/components.js";
@@ -62,7 +62,9 @@ export async function interactions(request, env, ctx, openStore) {
         console.error("Database or configuration operation failed", error.name);
         await editResponse(config, interaction, {
           content:
-            "Database or verification setup is incomplete. Ask an administrator to check MongoDB connectivity, run db:init, and configure /tiktok setup, /youtube setup, and /getrole.",
+            error instanceof ConfigurationError
+              ? configurationHelp(error.issues)
+              : "The verification database could not be reached or initialized. Ask the bot owner to check MongoDB connectivity and database initialization, then retry /verify.",
           components: [],
         }).catch(() => {});
       }
