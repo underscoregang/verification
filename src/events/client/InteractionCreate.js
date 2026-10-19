@@ -1,5 +1,6 @@
 import { commandHandlers } from "../../commands/index.js";
 import { execute as verify } from "../../commands/verify.js";
+import { helpMessage } from "../../commands/help.js";
 import { hasPermission } from "../../shared/security.js";
 import { discord, editResponse } from "../../discord/client.js";
 import { grant } from "../../discord/roles.js";
@@ -27,6 +28,8 @@ export function immediate(interaction, config) {
       : message("Manage Server permission is required.");
   if (type === 2 && ["verify", "verification-status"].includes(data.name))
     return null;
+  if (type === 2 && data.name === "help")
+    return { type: 4, data: helpMessage(interaction) };
   if (type === 3 && /^(?:proof:)?(youtube|tiktok)$/.test(data.custom_id)) {
     const platform = data.custom_id.replace("proof:", "");
     return enabled(config, platform)

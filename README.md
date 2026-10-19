@@ -96,6 +96,20 @@ The `:production` utilities explicitly read `.env.production`. Other CLI utiliti
 
 For local development, initialize a separate development MongoDB database with `npm.cmd run db:init`, then run `npm.cmd run dev`. Use `npm` instead of `npm.cmd` outside Windows.
 
+## Automatic deployment
+
+Every push to `main` runs `.github/workflows/deploy.yml`: a syntax check and dry-run build, then `wrangler deploy` and slash command registration. You can also start it from the **Actions** tab with **Run workflow**. Add these repository secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API token from the **Edit Cloudflare Workers** template, limited to this account and the `underscoregang.xyz` zone |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID (`npm.cmd run cf:whoami`) |
+| `DISCORD_TOKEN` | Bot token |
+| `DISCORD_CLIENT_ID` | Application ID |
+| `DISCORD_GUILD_ID` | Home server ID |
+
+The workflow deploys code only. Worker secrets still come from `npm.cmd run secrets:upload:production`, and database changes still use `npm.cmd run db:init:production`.
+
 ## Checks and operations
 
 ```powershell

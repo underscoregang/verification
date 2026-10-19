@@ -9,6 +9,8 @@ export function localEnv() {
   const argument = process.argv.find(value => value.startsWith('--env-file='));
   const selected = argument?.slice('--env-file='.length) || process.env.ENV_FILE || '.env';
   const path = resolve(root, selected);
+  // CI supplies credentials as environment variables without a default .env file.
+  if (!existsSync(path) && !argument && !process.env.ENV_FILE) return { ...process.env };
   if (!existsSync(path)) throw new Error('Selected environment file does not exist');
   return { ...parse(readFileSync(path)), ...process.env };
 }

@@ -6,6 +6,7 @@ import * as command4 from './getrole.js';
 import * as command5 from './verify.js';
 import * as command6 from './verification-status.js';
 import * as command7 from './verification-panel.js';
-const modules = [command0, command1, command2, command3, command4, command5, command6, command7];
+import * as command8 from './help.js';
+const modules = [command0, command1, command2, command3, command4, command5, command6, command7, command8];
 export const commands = modules.map(command => command.data);
 export const commandHandlers = new Map(modules.map(command => [command.data.name, command.execute]));
