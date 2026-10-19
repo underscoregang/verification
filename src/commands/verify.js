@@ -46,6 +46,14 @@ const openChannel = (config) =>
     url: channelLink(config),
   });
 
+// granted is false only when the policy still needs the other platform.
+function passed(granted, platform) {
+  if (granted) return "✅ **Passed!** Your access role has been granted.";
+  return platform === "youtube"
+    ? "✅ **YouTube passed!** Now send your TikTok follow screenshot to get the role."
+    : "✅ **TikTok passed!** Now send your YouTube subscription screenshot to get the role.";
+}
+
 export async function execute(interaction, config, store, prepared = {}) {
   const user = interaction.member.user.id, data = interaction.data;
   if (
@@ -90,10 +98,7 @@ export async function execute(interaction, config, store, prepared = {}) {
       (!record[`${platform}_target`] ||
         record[`${platform}_target`] === target(config, platform))
     )
-      return {
-        content:
-          "You are already approved for this platform. Use /verification-status to retry the access role.",
-      };
+      return { content: passed(await grant(config, store, user), platform) };
     const channel = await discord(
       config,
       `/channels/${config.REVIEW_CHANNEL_ID}`,
@@ -159,8 +164,7 @@ export async function execute(interaction, config, store, prepared = {}) {
             content: `**Automatically approved** screenshot from <@${user}>. Exact creator handle and subscription/follow state matched. Screenshot checks do not prove account ownership.`,
             components: [], allowed_mentions: { parse: [] },
           }).catch(() => {});
-          const granted = await grant(config, store, user);
-          return { content: granted ? 'Screenshot approved automatically. Your access role has been granted!' : 'Screenshot approved automatically. Complete the other platform requirement, or use /verification-status to retry your role.' };
+          return { content: passed(await grant(config, store, user), platform) };
         }
       } else {
         await discord(config, `/channels/${config.REVIEW_CHANNEL_ID}/messages/${sent.id}`, 'PATCH', {
@@ -174,7 +178,7 @@ export async function execute(interaction, config, store, prepared = {}) {
     }
     return {
       content:
-        "Screenshot submitted privately to staff. Your access role will be granted after approval when the requirement is met. Check /verification-status; please do not resubmit while pending.",
+        "🕵️ **Sent to staff review.** I couldn't confirm your screenshot automatically, so a staff member will check it. You'll get the role once it's approved, so there's no need to send it again.",
     };
   }
 

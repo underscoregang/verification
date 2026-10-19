@@ -20,6 +20,24 @@ export function clearMatch(observation, platform, handle) {
   );
 }
 
+// A confident, clean reading that shows the wrong creator or no subscription/follow.
+// Members can retry right away instead of waiting for staff.
+export function clearMismatch(observation, platform, handle) {
+  if (
+    observation?.platform !== platform ||
+    observation.clear !== true ||
+    observation.suspicious !== false ||
+    typeof observation.confidence !== "number" ||
+    observation.confidence < 0.95
+  )
+    return null;
+  const seen = normalize(observation.creator_handle);
+  if (seen && seen !== normalize(handle)) return "wrong_creator";
+  if (seen && observation.status !== (platform === "youtube" ? "Subscribed" : "Following"))
+    return "not_subscribed";
+  return null;
+}
+
 export async function scanScreenshot(config, platform, file) {
   if (!config.AI?.run)
     return { approved: false, reason: "scanner_unavailable" };
@@ -80,10 +98,13 @@ export async function scanScreenshot(config, platform, file) {
       const approved = clearMatch(observation, platform, handle);
       return {
         approved,
+        handle: normalize(handle),
         platform: ["youtube", "tiktok"].includes(observation?.platform)
           ? observation.platform
           : null,
-        reason: approved ? "clear_match" : "needs_staff_review",
+        reason: approved
+          ? "clear_match"
+          : clearMismatch(observation, platform, handle) || "needs_staff_review",
       };
     };
     return await Promise.race([
