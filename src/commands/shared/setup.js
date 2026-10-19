@@ -1,7 +1,7 @@
-import { discord } from "./client.js";
-import { hasPermission } from "../shared/security.js";
-import { resolveYoutube } from "../services/youtube.js";
-import { checkChannels } from "./channels.js";
+import { discord } from "../../discord/client.js";
+import { hasPermission } from "../../shared/security.js";
+import { resolveYoutube } from "../../services/youtube.js";
+import { checkChannels } from "../../discord/channels.js";
 
 export const isSetup = (i) =>
   i.type === 2 &&
@@ -101,7 +101,7 @@ export async function configure(interaction, config, store) {
     if (error) return { content: error };
     await store.saveChannels(submission, review, actor);
     return {
-      content: `Screenshot submissions: <#${submission}>. Staff reviews: <#${review}>.\nRun /panel in the channel where you want to post instructions. Members upload with the panel button or /verify; staff approve screenshots before access is granted.`,
+      content: `Screenshot submissions: <#${submission}>. Staff reviews: <#${review}>.\nRun /panel in the channel where you want to post instructions. Members upload with the panel button or /verify; clear images are checked automatically and uncertain images go to staff.`,
     };
   }
   if (name === "getrole") {
@@ -152,7 +152,7 @@ export async function configure(interaction, config, store) {
       config.TIKTOK_USERNAME,
     );
     return {
-      content: `TikTok target saved: @${username}. TikTok still requires moderator review. If the target changed, saved TikTok verification and pending reviews were reset; existing Discord roles are not removed.`,
+      content: `TikTok target saved: @${username}. Clear screenshots are checked automatically; uncertain images go to staff. If the target changed, saved TikTok verification and pending reviews were reset; existing Discord roles are not removed.`,
     };
   }
   const result = await resolveYoutube(

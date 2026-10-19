@@ -1,4 +1,4 @@
-import { commands } from "../discord/commands.js";
+import { commands } from "../commands/index.js";
 import { localEnv } from "../config/local-env.js";
 const env = localEnv();
 for (const key of ["DISCORD_TOKEN", "DISCORD_CLIENT_ID", "DISCORD_GUILD_ID"])

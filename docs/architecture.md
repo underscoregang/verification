@@ -1,65 +1,52 @@
 # Project structure
 
 ```text
-underscore-verification/
-├── src/
-│   ├── index.js                 # Cloudflare Worker entrypoint
-│   ├── app.js                   # Request routing and scheduled cleanup
-│   ├── cli/
-│   │   ├── manage.js            # Setup, database, secrets, endpoint commands
-│   │   └── register.js          # Register Discord slash commands
-│   ├── config/
-│   │   ├── runtime.js           # Worker configuration and verification policy
-│   │   └── local-env.js         # CLI-only environment file loader
-│   ├── database/
-│   │   ├── connection.js        # MongoDB connection lifecycle and indexes
-│   │   └── store.js             # Persistence, sessions, reviews, transactions
-│   ├── discord/
-│   │   ├── commands.js          # Slash command definitions
-│   │   ├── client.js            # Discord REST calls and response editing
-│   │   ├── components.js        # Buttons, rows, and interaction messages
-│   │   ├── interactions.js      # Command, button, and modal handling
-│   │   ├── roles.js             # Verification access role assignment
-│   │   └── setup.js             # Creator-account and access-role configuration
-│   ├── http/
-│   │   ├── client.js            # Provider requests, timeouts, safe errors
-│   │   ├── responses.js         # Response formatting and security headers
-│   ├── routes/
-│   │   ├── interactions.js      # Signed Discord webhook ingress and deferral
-│   │   └── health.js            # Database and configuration readiness
-│   ├── services/
-│   │   └── youtube.js           # YouTube handle/username resolution
-│   └── shared/
-│       └── security.js          # Signatures, tokens, cookies, input validation
-├── docs/
-│   └── architecture.md
-├── .env.example                # Configuration template; no real credentials
-├── package.json                # Stable npm command interface
-├── package-lock.json
-├── wrangler.jsonc              # Worker deployment configuration
-└── README.md                   # Setup, operations, and command documentation
+src/
+  index.js                         Worker entry point
+  app.js                           HTTP routing and scheduled cleanup
+  events/client/
+    InteractionCreate.js           Command dispatch, buttons, modals, deferred completion
+  commands/
+    index.js                       Explicit command registry for Worker bundling
+    verify.js                      Screenshot submission and automatic checks
+    panel.js                       Post verification instructions
+    channel.js                     Submission/review channel command
+    getrole.js                     Reward-role command
+    verification-status.js         Member status and role retry
+    verification-panel.js          Panel alias
+    youtube/
+      index.js                     Definition and subcommand dispatch
+      setup.js                     Creator setup entry
+      view.js                      Current creator
+      help.js                      Components V2 help
+    tiktok/
+      index.js
+      setup.js
+      view.js
+      help.js
+    shared/setup.js                Shared setup permissions and configuration validation
+  components/
+    index.js                       UI exports
+    content.js                     Interaction content responses
+    controls.js                    Rows, buttons and upload modals
+    embed.js                       Verification panel embed
+    v2.js                          Text displays, containers and Components V2 payloads
+  discord/                         REST client, channel permissions, role assignment
+  routes/                          Signed interaction ingress and health endpoint
+  services/                        Screenshot downloads, AI scan, YouTube lookup
+  database/                        MongoDB connections, indexes, transactions
+  config/                          Runtime configuration and CLI environment loader
+  cli/                             Register, setup, secrets and database tools
+  http/                            Provider requests and HTTP responses
+  shared/                          Signature verification and security utilities
 ```
 
-`.env`, `.env.production`, `node_modules/`, `.wrangler/`, and `dist/` are local or generated files excluded from version control. There are no SQL migrations or D1 runtime bindings.
+The HTTP route validates Discord signatures and acknowledges interactions before opening MongoDB. InteractionCreate dispatches slash commands through the explicit registry; button and modal events share the same signed route. Each command exports its Discord definition as data and its handler as execute. Creator commands dispatch setup, view and help from their own folders. Register definitions after changes with npm run register.
 
-## Request flow
+This deployment receives Discord interactions over HTTP, without a persistent Gateway client. Discord Gateway Ready and MessageCreate events are not received here, so no inactive handlers are included. Normal channel image messages do not trigger verification: members submit through /verify or the panel upload buttons. A future Gateway adapter would need its own persistent runtime and could reuse commands, services and UI builders. The /health endpoint reports Worker/database readiness.
 
-`index.js` exports the Worker assembled by `app.js`. The app selects an HTTP route. The Discord interaction route validates signatures and acknowledges requests before opening MongoDB connections. Members upload screenshots through native file-upload modals or slash-command attachments. The screenshot service validates and copies images to a private review channel. Staff approvals are saved in a MongoDB transaction before the configured access role is granted. The health route reports database and configuration readiness separately. OAuth routes have been retired.
+UI builders keep plain content, legacy embeds and Components V2 separate. Components V2 help uses flag 32768 and text/container components without legacy content or embeds. Existing panels retain their embeds and working upload buttons.
 
-`database/connection.js` owns request-scoped MongoDB clients. `database/store.js` owns collection operations and transactions. Route and Discord modules use the store rather than issuing database queries themselves.
+Screenshot copies are stored in the private Discord review channel. Cloudflare Workers AI scans clear creator handles and subscription/follow states, with uncertain results and provider failures left for staff. Approval is persisted transactionally before awarding a role. Image matching cannot prove account ownership or reliably detect every forgery. YouTube automatic checks need YOUTUBE_API_KEY to resolve the canonical creator handle.
 
-## Where to make changes
-
-- Add or rename slash commands in `discord/commands.js` and implement their behavior in `discord/interactions.js` or `discord/setup.js`. Run `npm run register` after changing definitions.
-- Adjust verification buttons and message components in `discord/components.js`.
-- Change screenshot validation and reuploading in `services/screenshots.js`; change creator-account lookup in `services/youtube.js`.
-- Change collections and indexes in `database/`; initialize new indexes with `npm run db:init:production` before deploying dependent code.
-- Change environment requirements or verification policy in `config/runtime.js`.
-- Change deployment/setup tooling in `cli/`. CLI modules and `config/local-env.js` are not imported into the Worker, so local filesystem reads and secrets remain outside the runtime bundle.
-
-The screenshot rebuild retains the Worker URL, MongoDB collections, creator accounts, and access-role configuration. OAuth callbacks are retired; `/channel setup` selects the screenshot channels and `/panel` posts the new instructions.
-
-Screenshot-specific modules: `src/discord/channels.js` validates channel permissions and review privacy; `src/services/screenshots.js` validates uploaded files and copies them into Discord staff storage.
-
-
-Automatic screenshot checks use the Cloudflare Workers AI binding (`@cf/google/gemma-4-26b-a4b-it`). Clear images with an exact creator @handle and active Subscribed/Following state are approved automatically; ambiguous images, provider failures and timeouts stay pending for staff. YouTube automatic matching requires YOUTUBE_API_KEY to resolve the saved channel ID to its canonical handle. Screenshots are sent to Cloudflare for analysis and retained in the private Discord review channel. Image matching cannot prove account ownership or detect every forgery; claimed usernames are not independently verified. There is no Google sign-in. Workers AI usage is subject to Cloudflare quotas and pricing.
+Database schema, saved targets, roles, channels and environment settings are preserved by this restructuring. Local environment files, .wrangler, node_modules and dist remain ignored. OAuth routes are retired.

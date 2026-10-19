@@ -4,10 +4,10 @@ import { MongoClient } from 'mongodb';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { initializeDatabase } from '../src/database/connection.js';
 import { Store } from '../src/database/store.js';
-import { immediate, perform, complete } from '../src/discord/interactions.js';
+import { immediate, perform, complete } from '../src/events/client/InteractionCreate.js';
 import { screenshotInput, screenshotFile } from '../src/services/screenshots.js';
-import { panel } from '../src/discord/components.js';
-import { commands } from '../src/discord/commands.js';
+import { panel } from '../src/components/index.js';
+import { commands } from '../src/commands/index.js';
 
 const id = suffix => `100000000000000${suffix.toString().padStart(3, '0')}`;
 const config = { DISCORD_TOKEN: 'test-only', DISCORD_CLIENT_ID: id(1), DISCORD_GUILD_ID: id(2), VERIFIED_ROLE_ID: id(3), SUBMISSION_CHANNEL_ID: id(4), REVIEW_CHANNEL_ID: id(5), YOUTUBE_CHANNEL_ID: `UC${'a'.repeat(22)}`, TIKTOK_USERNAME: 'underscore', policy: 'either' };

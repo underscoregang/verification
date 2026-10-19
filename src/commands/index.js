@@ -1,0 +1,11 @@
+import * as command0 from './channel.js';
+import * as command1 from './panel.js';
+import * as command2 from './tiktok/index.js';
+import * as command3 from './youtube/index.js';
+import * as command4 from './getrole.js';
+import * as command5 from './verify.js';
+import * as command6 from './verification-status.js';
+import * as command7 from './verification-panel.js';
+const modules = [command0, command1, command2, command3, command4, command5, command6, command7];
+export const commands = modules.map(command => command.data);
+export const commandHandlers = new Map(modules.map(command => [command.data.name, command.execute]));

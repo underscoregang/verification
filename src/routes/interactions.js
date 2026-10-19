@@ -1,9 +1,9 @@
 import { loadConfig, ConfigurationError, configurationHelp } from "../config/runtime.js";
 import { validSignature } from "../shared/security.js";
-import { immediate, complete } from "../discord/interactions.js";
-import { message } from "../discord/components.js";
+import { immediate, complete } from "../events/client/InteractionCreate.js";
+import { message } from "../components/index.js";
 import { editResponse } from "../discord/client.js";
-import { isSetup } from "../discord/setup.js";
+import { isSetup } from "../commands/shared/setup.js";
 import { text, json } from "../http/responses.js";
 
 export async function interactions(request, env, ctx, openStore) {
