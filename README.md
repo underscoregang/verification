@@ -1,141 +1,159 @@
-# Underscore Screenshot Verification
+# Underscore Verifier
 
-Discord screenshot verification on Cloudflare Workers and MongoDB. Members subscribe to your YouTube channel or follow your TikTok account, post a screenshot directly in the configured verification channel, and receive automatic approval for clear matches. Uncertain screenshots go to staff. No Google sign-in, OAuth consent screen, or Google OAuth credentials are required.
+A Discord bot that gives members an access role after they prove they subscribe to your YouTube channel or follow your TikTok account. Members post a screenshot in a verification channel; Cloudflare Workers AI reads it, clear matches get the role automatically, and unclear ones go to staff.
 
-Screenshots cannot reliably prove account ownership or a genuine subscription by themselves. This bot uses **automatic image checks with staff fallback**, then grants the configured role after approval. It does not independently verify the claimed account or detect every forged image.
+It runs on Cloudflare Workers with MongoDB. It is not a public bot: it serves one Discord server and leaves any other server it is added to.
 
-## Configure the server
+> Screenshots cannot prove account ownership or a real subscription. The bot rejects clear mismatches and sends unclear images to staff, but it cannot detect every edited or reused screenshot.
 
-Create a member-facing `#verify` text channel and a separate private `#verification-review` staff channel. Hide the staff review channel from `@everyone`, and allow your staff roles and the bot to view it. Give the bot **View Channel**, **Send Messages**, **Embed Links**, and **Attach Files** in the review channel. Give it **Manage Roles** and move its highest role above the normal access role it will award.
+## How it works for members
 
-Use these administrator commands:
+1. Subscribe or follow using the creator links in the verification panel.
+2. Take a screenshot that shows the creator's **@handle** and **Subscribed** or **Following**.
+3. Post it as a normal image in the verification channel.
 
-```text
-/channel setup channel:#verify review-channel:#verification-review
-/channel logs channel:#bot-logs
-/getrole role:@Verified
-/youtube setup channel:UCxxxxxxxxxxxxxxxxxxxxxx
-/youtube view
-/youtube help
-/tiktok setup username:@youraccount
-/tiktok view
-/tiktok help
-/panel channel:#free-code
-/panel channel:#verify
-```
+The bot replies with **⏳ Processing your screenshot…**, deletes the screenshot, then shows the result and deletes that reply after 5 seconds, so the channel stays empty:
 
-`/channel setup`, `/panel`, and creator account setup require **Manage Server**. `/getrole` and staff review buttons require **Manage Roles**. The bot rejects public staff review channels and checks its channel permissions before saving settings. It does not change your channel permissions automatically.
-
-The bot serves only the server in `DISCORD_GUILD_ID`. If anyone adds it to another server, it leaves automatically and posts the server, owner and (when the audit log is readable) the inviter to the private `/channel logs` channel, followed by a leave log. To stop other people adding it at all, turn off **Public Bot** under **Bot** in the Discord Developer Portal.
-
-`/panel` posts branded instructions and creator links. In `#verify`, the panel has no upload buttons; members send a normal image message. In another channel, it includes an **Open verification channel** button. You can omit the panel's `channel` option to post in the current channel. `/verification-panel` remains an alias.
-
-`/youtube setup` accepts a channel ID, username, handle, or supported YouTube channel URL. Username/handle lookup requires `YOUTUBE_API_KEY`; a `UC...` channel ID does not. This lookup is used only for administrator setup, not member sign-in.
-
-## Member experience
-
-1. Subscribe or follow using the panel's creator links.
-2. Take a clear screenshot showing the correct creator and **Subscribed** or **Following** status.
-3. Send one screenshot directly in `#verify`. The bot detects the platform and replies with the result.
-4. Clear matches are approved automatically. Staff approve or reject uncertain screenshots in the private review channel. Once approved and the policy is satisfied, the bot grants the access role.
-
-PNG, JPG, and WebP screenshots up to **8 MB** are accepted. The bot validates file metadata and image signatures and reuploads the image into the staff channel, so temporary upload URLs do not make pending evidence disappear.
-
-For screenshots the bot cannot identify, use the slash-command attachment fallback:
-
-```text
-/verify platform:youtube screenshot:<attach image> username:yourusername
-/verify platform:tiktok screenshot:<attach image> username:yourusername
-```
-
-**Normal image messages in the configured verification channel submit verification automatically.** No button, external image host or pasted URL is required.
-
-Members can use `/verification-status` to check pending/rejected/approved submissions and retry a failed role grant. One pending screenshot per member is allowed. Rejected members may submit another image. Staff cannot approve their own proof, and only the original review message can approve its associated submission. Concurrent decisions and repeated button clicks cannot grant approval twice.
-
-The `VERIFICATION_POLICY` setting supports `youtube`, `tiktok`, `either`, or `both`. With `both`, each platform requires its own approved screenshot; members submit the second after the first is approved or rejected. Verification is a point-in-time image assessment. Later unsubscribes/unfollows do not automatically revoke access.
-
-## Hosting and configuration
-
-Use Node.js 24+ locally, Cloudflare Workers, and MongoDB Atlas or another transaction-capable MongoDB replica set. Keep a dedicated MongoDB database for this server. MongoDB network access must permit both your development computer and Worker egress.
-
-Copy `.env.example` to `.env` for development or `.env.production` for production credentials. Settings saved by Discord commands override environment defaults and persist across deployments.
-
-| Variable | Purpose |
+| Result | Meaning |
 | --- | --- |
-| `DISCORD_TOKEN` | Bot token from the Discord Developer Portal. |
-| `DISCORD_CLIENT_ID` | Application ID. |
-| `DISCORD_PUBLIC_KEY` | Public Key under General Information; validates Discord requests. |
-| `DISCORD_GUILD_ID` | Your server ID. |
-| `MONGODB_URI` | Private MongoDB connection string. |
-| `MONGODB_DB_NAME` | Database name; defaults to `underscore_verification`. |
-| `PUBLIC_URL` | Public HTTPS origin serving the Worker. |
-| `VERIFICATION_POLICY` | `youtube`, `tiktok`, `either`, or `both`. |
-| `YOUTUBE_CHANNEL_ID` | Optional default; usually set with `/youtube setup`. |
-| `YOUTUBE_API_KEY` | Optional: resolve handles/usernames during creator setup. |
-| `TIKTOK_USERNAME` | Optional default; usually set with `/tiktok setup`. |
+| ✅ **Passed** | The image clearly matches. The access role is granted. |
+| ❌ **Failed** | The image clearly shows another account or no subscription/follow, or the file is not a usable image. The member can send a new screenshot right away. |
+| 🕵️ **Sent to staff review** | The image could not be read clearly. Staff approve or reject it in the private review channel. |
 
-Google OAuth client IDs/secrets, Discord OAuth client secrets, and OAuth redirect registration are no longer used. Old `/start` and OAuth callback URLs return a message directing members to screenshot verification in Discord.
+Members can also use `/verify` to upload a screenshot privately, and `/help` to see these instructions. PNG, JPG and WebP files up to **8 MB** are accepted.
 
-Invite the bot with `bot` and `applications.commands` scopes. It does not require Administrator or privileged gateway intents. An offline presence badge is normal for an HTTP interaction bot and does not prevent commands from working.
+## Commands
 
-From PowerShell in this folder:
+| Command | Who | What it does |
+| --- | --- | --- |
+| `/help` | Everyone | How to get verified. Staff also see the setup commands. |
+| `/verify` | Everyone | Upload a screenshot privately instead of posting it. |
+| `/verification-status` | Everyone | Show approval status and retry granting the role. |
+| `/channel setup` | Manage Server | Choose the verification channel and the private staff review channel. |
+| `/channel logs` | Manage Server | Choose the private channel for bot logs. |
+| `/getrole` | Manage Roles | Choose the role given after verification. |
+| `/youtube setup` · `view` · `help` | Manage Server | Set or check the YouTube creator (channel ID, @handle or URL). |
+| `/tiktok setup` · `view` · `help` | Manage Server | Set or check the TikTok creator. |
+| `/panel` | Manage Server | Post the verification instructions. `/verification-panel` is an alias. |
 
-```powershell
-npm.cmd ci
-npm.cmd run db:init:production
-npm.cmd run db:check:production
-npm.cmd run secrets:upload:production
-npm.cmd run deploy
-npm.cmd run register -- --env-file=.env.production
-npm.cmd run endpoint:setup -- --env-file=.env.production
-```
+## Set up a server
 
-The endpoint setup command asks Discord to validate and save `<PUBLIC_URL>/interactions`. Existing installations generally only need code deployment and command registration for this update, then `/channel setup` and new panels. Saved creator accounts and access roles are preserved. Old platform buttons now open screenshot upload forms; post a new panel to replace OAuth-era instructions.
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), open the application and go to **Bot**:
+   - Turn on **Message Content Intent** (the bot reads image messages).
+   - Turn off **Public Bot** so only you can add it to servers.
+2. Invite the bot with the `bot` and `applications.commands` scopes.
+3. Create the channels and give the bot these permissions:
 
-The `:production` utilities explicitly read `.env.production`. Other CLI utilities default to `.env` and accept `--env-file=.env.production`. Shell environment variables take precedence. Local Wrangler reads `.env` or `.dev.vars`; production secrets are uploaded explicitly. Secrets are passed to Wrangler through stdin and are not printed or written to a temporary export.
+   | Channel | Bot permissions |
+   | --- | --- |
+   | `#verify`, where members post screenshots | View Channel, Send Messages, **Manage Messages** (to delete screenshots and results) |
+   | `#verification-review`, private to staff | View Channel, Send Messages, Embed Links, Attach Files |
+   | `#bot-logs`, private to staff | View Channel, Send Messages, Embed Links |
 
-For local development, initialize a separate development MongoDB database with `npm.cmd run db:init`, then run `npm.cmd run dev`. Use `npm` instead of `npm.cmd` outside Windows.
+   Give the bot **Manage Roles** and move its role above the access role.
+4. Run the setup commands:
 
-## Automatic deployment
+   ```text
+   /channel setup channel:#verify review-channel:#verification-review
+   /channel logs channel:#bot-logs
+   /getrole role:@Verified
+   /youtube setup channel:@yourchannel
+   /tiktok setup username:@youraccount
+   /panel channel:#verify
+   ```
 
-Every push to `main` runs `.github/workflows/deploy.yml`: a syntax check and dry-run build, then `wrangler deploy` and slash command registration. You can also start it from the **Actions** tab with **Run workflow**. Add these repository secrets under **Settings → Secrets and variables → Actions**:
+The bot checks its permissions before saving each channel and refuses staff channels that `@everyone` can see. It never changes channel permissions itself.
+
+### Verification policy
+
+`VERIFICATION_POLICY` is `youtube`, `tiktok`, `either` or `both`. With `both`, members send one screenshot per platform, and the role is granted after the second passes. Verification is a one-time check: unsubscribing later does not remove the role.
+
+### Server logs
+
+The bot posts to the `/channel logs` channel when it:
+
+- **Is added to another server:** it leaves right away and logs the server, owner and, when the audit log is readable, who added it.
+- **Leaves a server:** it logs whether it left automatically or was removed.
+- **Is re-added to the home server.**
+
+## Deploy
+
+You need Node.js 24+, a Cloudflare account with Workers and Workers AI, and a MongoDB replica set that supports transactions (MongoDB Atlas works). MongoDB network access must allow Cloudflare Workers.
+
+1. Copy `.env.example` to `.env.production` and fill it in:
+
+   | Variable | Purpose |
+   | --- | --- |
+   | `DISCORD_TOKEN` | Bot token. |
+   | `DISCORD_CLIENT_ID` | Application ID. |
+   | `DISCORD_PUBLIC_KEY` | Public key; verifies requests from Discord. |
+   | `DISCORD_GUILD_ID` | The one server this bot serves. |
+   | `MONGODB_URI` | MongoDB connection string. |
+   | `MONGODB_DB_NAME` | Database name; defaults to `underscore_verification`. |
+   | `PUBLIC_URL` | Public HTTPS address of the Worker. |
+   | `VERIFICATION_POLICY` | `youtube`, `tiktok`, `either` or `both`. |
+   | `YOUTUBE_API_KEY` | Needed to look up YouTube handles for setup and automatic checks. |
+   | `YOUTUBE_CHANNEL_ID`, `TIKTOK_USERNAME` | Optional defaults; usually set with `/youtube setup` and `/tiktok setup`. |
+
+   Channel and role IDs are not environment variables; the setup commands save them in MongoDB.
+
+2. From PowerShell in this folder (use `npm` instead of `npm.cmd` outside Windows):
+
+   ```powershell
+   npm.cmd ci
+   npm.cmd run cf:login
+   npm.cmd run db:init:production
+   npm.cmd run secrets:upload:production
+   npm.cmd run deploy
+   npm.cmd run register -- --env-file=.env.production
+   npm.cmd run endpoint:setup -- --env-file=.env.production
+   ```
+
+`endpoint:setup` registers `<PUBLIC_URL>/interactions` with Discord. Secrets are uploaded to Cloudflare from `.env.production` and are never stored in `wrangler.jsonc`.
+
+### Automatic deployment
+
+Every push to `main` runs [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): a syntax check and a build without uploading, then `wrangler deploy` and slash command registration. You can also start it from the **Actions** tab. Add these repository secrets under **Settings → Secrets and variables → Actions**:
 
 | Secret | Value |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token from the **Edit Cloudflare Workers** template, limited to this account and the `underscoregang.xyz` zone |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID (`npm.cmd run cf:whoami`) |
-| `DISCORD_TOKEN` | Bot token |
-| `DISCORD_CLIENT_ID` | Application ID |
-| `DISCORD_GUILD_ID` | Home server ID |
+| `CLOUDFLARE_API_TOKEN` | A token from the **Edit Cloudflare Workers** template. Read-only tokens cannot deploy. |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID (`npm.cmd run cf:whoami`). |
+| `DISCORD_TOKEN` | Bot token. |
+| `DISCORD_CLIENT_ID` | Application ID. |
+| `DISCORD_GUILD_ID` | Home server ID. |
 
-The workflow deploys code only. Worker secrets still come from `npm.cmd run secrets:upload:production`, and database changes still use `npm.cmd run db:init:production`.
+The workflow deploys code only. Run `secrets:upload:production` and `db:init:production` yourself when secrets or database indexes change.
 
-## Checks and operations
+### Local development
+
+Use a separate development database: `npm.cmd run db:init`, then `npm.cmd run dev`. Workers AI always runs on Cloudflare, so local checks use your real AI quota.
+
+## Operations
 
 ```powershell
-npm.cmd test
-npm.cmd run check
-npm.cmd run deploy:check
+npm.cmd run check         # syntax check
+npm.cmd run deploy:check  # build without uploading
+npx wrangler tail         # live production logs
+npx wrangler rollback     # return to the previous version
 ```
 
-Tests use an isolated local MongoDB replica set and mocked Discord services. They never use your production database. The first test run downloads a MongoDB binary; later runs reuse the cache. Live server permissions and actual Discord upload UI still require a real member submission.
+- `GET /health` reports `ready` and `databaseReady`.
+- A Durable Object keeps the Discord Gateway connection open, with heartbeats, resume and backoff. An hourly cron and a one-minute alarm restart it if needed. Outgoing WebSockets cannot hibernate, so the connection incurs Durable Object duration charges.
+- `POST /internal/gateway` with `Authorization: Bearer <DISCORD_TOKEN>` starts the connection and reports its status.
+- The hourly cron also removes expired temporary records.
 
-`GET /health` reports `ready` and `databaseReady`. A healthy database with `verification_configuration_incomplete` means an administrator still needs to set a role, creator account, or verification channel. Setup commands remain usable before all verification settings are present. The hourly cleanup job removes expired temporary records and releases stale undelivered submissions.
+## Data and privacy
 
-MongoDB stores Discord IDs, claimed social usernames, approved targets, screenshot attachment references, review decisions, and settings audit metadata. Screenshot copies are stored in Discord's staff channel, not in MongoDB. Keep that channel private. For data removal, delete the member's database records and screenshot review messages; manually remove access roles when appropriate. Existing verification and roles remain until explicitly reset or removed. Changing a creator account clears approval for that platform and rejects its pending reviews; existing Discord roles are retained.
+- **MongoDB** stores Discord IDs, approval status, the creator each approval was for, review decisions, and who changed settings.
+- **Screenshots** are sent to Cloudflare Workers AI for reading and copied into the private staff review channel. They are not stored in MongoDB, and the original message is deleted from the verification channel.
+- **To remove a member's data,** delete their MongoDB records and their review messages, then remove the role if needed.
+- **Changing a creator account** clears approvals for that platform and rejects its pending reviews; existing roles stay.
 
-Code layout: [Architecture guide](docs/architecture.md). Reference: [Discord file upload components](https://docs.discord.com/developers/components/reference#file-upload).
+## Security
 
+See [SECURITY.md](SECURITY.md) for how to report a vulnerability and how the bot protects tokens, roles and screenshots.
 
-Automatic screenshot checks use the Cloudflare Workers AI binding (`@cf/google/gemma-4-26b-a4b-it`). Clear images with an exact creator @handle and active Subscribed/Following state are approved automatically; ambiguous images, provider failures and timeouts stay pending for staff. YouTube automatic matching requires YOUTUBE_API_KEY to resolve the saved channel ID to its canonical handle. Screenshots are sent to Cloudflare for analysis and retained in the private Discord review channel. Image matching cannot prove account ownership or detect every forgery; claimed usernames are not independently verified. There is no Google sign-in. Workers AI usage is subject to Cloudflare quotas and pricing.
+## License
 
-See [project structure](docs/architecture.md) for command modules, HTTP interaction events and content/embed/Components V2 response builders. Creator view/help commands currently require Manage Server, like setup.
-
-Access role and submission/review channel IDs are stored only in MongoDB by `/getrole` and `/channel setup`; they are not environment variables or Worker secrets.
-
-
-## Direct image uploads
-
-Enable **Message Content Intent** under Bot in Discord Developer Portal. A named Cloudflare Durable Object maintains the Discord Gateway connection and listens for member images in the MongoDB-configured submission channel. The bot replies to each image with checking, approved, staff-review or retry instructions. Only one PNG/JPG/WebP up to 8 MB per message is accepted. Bots, webhooks, other servers and other channels are ignored. Platform detection reads the screenshot; unreadable platforms can use the slash attachment fallback. `/verify` with no options gives direct upload instructions; existing slash attachment/modal submissions remain compatible.
-
-The Gateway uses heartbeats, resume/reconnect, backoff and an alarm supervisor. Fatal token/intent errors stop reconnection attempts. Outgoing WebSockets cannot hibernate and incur Cloudflare Durable Object duration charges. Queued message metadata is temporarily stored in the Durable Object until processed, then deleted. The hourly cron restarts the listener if needed. An authenticated POST to `/internal/gateway` with the bot token as Bearer authorization starts/checks the listener; never share that token. Public `/health` remains the database/configuration check.
+[MIT](LICENSE) © Underscore Gang
