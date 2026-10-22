@@ -127,6 +127,15 @@ The workflow deploys code only. Run `secrets:upload:production` and `db:init:pro
 
 ### Local development
 
+Local `db:init` and `db:check` commands (including the production variants) use
+DNS resolvers `1.1.1.1` and `8.8.8.8` for MongoDB SRV/TXT discovery. Override them
+with `MONGODB_DNS_SERVERS=1.1.1.1,8.8.8.8` in the selected environment file, or
+set `MONGODB_DNS_SERVERS=` to keep the system resolver. These settings affect
+Node DNS queries, not operating-system hostname lookups or Atlas network access.
+This setting is local only and is not uploaded as a Worker secret. Cloudflare
+Workers already resolves DNS through Cloudflare's DNS-over-HTTPS service:
+https://developers.cloudflare.com/workers/runtime-apis/nodejs/dns/ .
+
 Use a separate development database: `npm.cmd run db:init`, then `npm.cmd run dev`. Workers AI always runs on Cloudflare, so local checks use your real AI quota.
 
 ## Operations
