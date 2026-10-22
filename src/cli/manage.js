@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
+import { setServers } from "node:dns";
 import { resolve } from "node:path";
 import { localEnv, keys, root } from "../config/local-env.js";
-import { configureLocalDns } from "../config/local-dns.js";
 import { configIssues } from "../config/runtime.js";
 import {
   databaseIssues,
@@ -122,7 +122,7 @@ try {
   else if (command === "endpoint:setup") await endpoint(env);
   else {
     validate(databaseIssues(env));
-    configureLocalDns(env);
+    setServers(["1.1.1.1", "1.0.0.1"]);
     await withStore(
       env,
       async (store) => {
@@ -138,77 +138,9 @@ try {
     );
   }
 } catch (error) {
-  // Never print arbitrary driver messages: they can contain credentials.
+  // Driver/network error messages can contain credentials; only log the type.
   console.error(
     `${command} failed (${error.name}). Check the selected configuration file, credentials, network access, and required permissions.`,
   );
-  const guidance = new Map([
-    [
-      "Selected environment file does not exist",
-      "The selected environment file is missing. Create .env.production in the project root, or select an existing file with --env-file=... .",
-    ],
-    [
-      "Initialize MongoDB indexes with db:init before using the bot",
-      "The selected database has not been initialized. Run npm run db:init:production for .env.production, or db:init with the same --env-file option.",
-    ],
-    [
-      "Run npm run db:init to create the MongoDB indexes",
-      "Required indexes are missing. Run db:init with the same environment file.",
-    ],
-    [
-      "MongoDB replica set or Atlas cluster required for transactions",
-      "This database does not support the required transactions. Use MongoDB Atlas or a replica set.",
-    ],
-  ]);
-  if (guidance.has(error.message)) console.error(guidance.get(error.message));
-  // Inspect nested network failures, including each server selection failure.
-  const pending = [error];
-  const seen = new Set();
-  const hints = new Set();
-  const codes = new Map([
-    [
-      "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
-      'TLS certificate verification failed. Retry with NODE_OPTIONS="--use-system-ca"; if it persists, check the trusted CA certificates on this machine.',
-    ],
-    [
-      "SELF_SIGNED_CERT_IN_CHAIN",
-      "The TLS certificate chain includes an untrusted certificate. Check the trusted CA certificates on this machine.",
-    ],
-    [
-      "ENOTFOUND",
-      "MongoDB DNS lookup failed. Check the connection string hostname and DNS access.",
-    ],
-    [
-      "ECONNREFUSED",
-      "MongoDB refused the connection. Check that the cluster is running and network access is permitted.",
-    ],
-    [
-      "ETIMEDOUT",
-      "MongoDB connection timed out. Check the firewall and Atlas Network Access list.",
-    ],
-    [
-      18,
-      "MongoDB authentication failed. Check the database username, password, and authentication database.",
-    ],
-    [
-      13,
-      "The database user lacks permission for this operation. Check its roles for the selected database.",
-    ],
-    [
-      11000,
-      "Existing duplicate records prevent creating a required unique index. Review duplicates before initializing again.",
-    ],
-  ]);
-  while (pending.length) {
-    const item = pending.pop();
-    if (!item || seen.has(item)) continue;
-    seen.add(item);
-    if (codes.has(item.code)) hints.add(codes.get(item.code));
-    pending.push(item.cause);
-    if (item.reason?.servers instanceof Map)
-      for (const server of item.reason.servers.values())
-        pending.push(server.error);
-  }
-  for (const hint of hints) console.error(hint);
   process.exitCode = 1;
 }
