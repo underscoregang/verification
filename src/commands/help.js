@@ -25,7 +25,7 @@ const memberHelp = `## Underscore Verifier help
 const staffHelp = `### Staff commands
 \`/channel setup\`: choose the verification and private staff review channels
 \`/channel logs\`: choose the private channel for bot logs
-\`/getrole\`: choose the role given after verification
+\`/getrole\`: choose the role given, and optionally a role removed, after verification
 \`/youtube setup\` · \`view\` · \`help\`: set or check the YouTube creator
 \`/tiktok setup\` · \`view\` · \`help\`: set or check the TikTok creator
 \`/panel\`: post the verification instructions

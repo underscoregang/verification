@@ -31,7 +31,7 @@ Members can also use `/verify` to upload a screenshot privately, and `/help` to 
 | `/verification-status` | Everyone | Show approval status and retry granting the role. |
 | `/channel setup` | Manage Server | Choose the verification channel and the private staff review channel. |
 | `/channel logs` | Manage Server | Choose the private channel for bot logs. |
-| `/getrole` | Manage Roles | Choose the role given after verification. |
+| `/getrole` | Manage Roles | Choose the role given after verification, and optionally a role removed (`remove-role:@Unverified`). |
 | `/youtube setup` · `view` · `help` | Manage Server | Set or check the YouTube creator (channel ID, @handle or URL). |
 | `/tiktok setup` · `view` · `help` | Manage Server | Set or check the TikTok creator. |
 | `/panel` | Manage Server | Post the verification instructions. `/verification-panel` is an alias. |
@@ -56,7 +56,7 @@ Members can also use `/verify` to upload a screenshot privately, and `/help` to 
    ```text
    /channel setup channel:#verify review-channel:#verification-review
    /channel logs channel:#bot-logs
-   /getrole role:@Verified
+   /getrole role:@Verified remove-role:@Unverified
    /youtube setup channel:@yourchannel
    /tiktok setup username:@youraccount
    /panel channel:#verify

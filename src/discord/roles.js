@@ -35,5 +35,16 @@ export async function grant(config, store, user) {
     `/guilds/${config.DISCORD_GUILD_ID}/members/${user}/roles/${role.id}`,
     "PUT",
   );
+  // Skip a removal role that was deleted since /getrole, so verification keeps working.
+  if (
+    config.REMOVED_ROLE_ID &&
+    config.REMOVED_ROLE_ID !== role.id &&
+    roles.some((item) => item.id === config.REMOVED_ROLE_ID)
+  )
+    await discord(
+      config,
+      `/guilds/${config.DISCORD_GUILD_ID}/members/${user}/roles/${config.REMOVED_ROLE_ID}`,
+      "DELETE",
+    );
   return true;
 }

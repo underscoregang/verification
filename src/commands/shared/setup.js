@@ -125,28 +125,54 @@ export async function configure(interaction, config, store) {
     };
   }
   if (name === "getrole") {
-    const raw = options.find((option) => option.name === "role")?.value;
-    const id =
-      typeof raw === "string" &&
-      raw
-        .trim()
-        .match(/^(?:<@&(\d{17,20})>|(\d{17,20}))$/)
-        ?.slice(1)
-        .find(Boolean);
+    const roleId = (key) => {
+      const raw = options.find((option) => option.name === key)?.value;
+      return (
+        typeof raw === "string" &&
+        raw
+          .trim()
+          .match(/^(?:<@&(\d{17,20})>|(\d{17,20}))$/)
+          ?.slice(1)
+          .find(Boolean)
+      );
+    };
+    const id = roleId("role");
     if (!id)
       return {
         content: "Enter a role mention such as @Verified or a numeric role ID.",
       };
+    const removeGiven = options.some((option) => option.name === "remove-role");
+    const removeId = removeGiven ? roleId("remove-role") : null;
+    if (removeGiven && !removeId)
+      return {
+        content:
+          "Enter the role to remove as a mention such as @Unverified or a numeric role ID.",
+      };
+    if (removeId === id)
+      return {
+        content: "The role to remove must be different from the role given.",
+      };
     const error = await validateRole(config, interaction, id);
     if (error) return { content: error };
+    if (removeId) {
+      const removeError = await validateRole(config, interaction, removeId);
+      if (removeError) return { content: `Role to remove: ${removeError}` };
+    }
     await store.saveSetting(
       "VERIFIED_ROLE_ID",
       id,
       actor,
       config.VERIFIED_ROLE_ID,
     );
+    // Running /getrole without remove-role clears a previously saved one.
+    await store.saveSetting(
+      "REMOVED_ROLE_ID",
+      removeId,
+      actor,
+      config.REMOVED_ROLE_ID,
+    );
     return {
-      content: `Verification access role saved: <@&${id}>. Members receive this role only after satisfying the verification policy. Existing roles are not removed.`,
+      content: `Verification access role saved: <@&${id}>. Members receive this role only after satisfying the verification policy. ${removeId ? `Verified members also lose <@&${removeId}>.` : "No role is removed on verification."}`,
     };
   }
   const subcommand = options.find(
