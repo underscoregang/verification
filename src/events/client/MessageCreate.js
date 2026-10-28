@@ -55,14 +55,33 @@ export async function messageCreate(message, env, openStore = withStore) {
             content: `<@${message.author.id}> ${text}`,
             allowed_mentions: { parse: [], users: [message.author.id] },
           };
-      const previousResponseId = componentMessage ? responseId : undefined;
-      if (responseId)
-        return discord(
-          env,
-          `/channels/${message.channel_id}/messages/${responseId}`,
-          "PATCH",
-          payload,
-        );
+      if (responseId) {
+        try {
+          return await discord(
+            env,
+            `/channels/${message.channel_id}/messages/${responseId}`,
+            "PATCH",
+            componentMessage ? { ...payload, content: null } : payload,
+          );
+        } catch (error) {
+          if (!componentMessage) throw error;
+          console.error(
+            "Verification card edit failed; using text result",
+            error.name,
+            error.status || "",
+          );
+          return discord(
+            env,
+            `/channels/${message.channel_id}/messages/${responseId}`,
+            "PATCH",
+            {
+              content: `<@${message.author.id}> ✅ Verification passed! Your access role has been granted. If you don't see it, run /verification-status.`,
+              components: [],
+              allowed_mentions: { parse: [], users: [message.author.id] },
+            },
+          );
+        }
+      }
       const createPayload = {
         ...payload,
         message_reference: {
@@ -72,39 +91,13 @@ export async function messageCreate(message, env, openStore = withStore) {
         nonce: `m:${message.id}`,
         enforce_nonce: true,
       };
-      let response;
-      try {
-        response = await discord(
-          env,
-          `/channels/${message.channel_id}/messages`,
-          "POST",
-          createPayload,
-        );
-      } catch (error) {
-        if (!componentMessage) throw error;
-        // Keep a readable result if Discord refuses the Components V2 card.
-        response = await discord(
-          env,
-          `/channels/${message.channel_id}/messages`,
-          "POST",
-          {
-            content: `<@${message.author.id}> ✅ Verification passed! Your access role has been granted. If you don't see it, run /verification-status.`,
-            allowed_mentions: { parse: [], users: [message.author.id] },
-            message_reference: createPayload.message_reference,
-            nonce: `m:${message.id}:fallback`,
-            enforce_nonce: true,
-          },
-        );
-      }
+      const response = await discord(
+        env,
+        `/channels/${message.channel_id}/messages`,
+        "POST",
+        createPayload,
+      );
       responseId = response.id;
-      if (previousResponseId)
-        await discord(
-          env,
-          `/channels/${message.channel_id}/messages/${previousResponseId}`,
-          "DELETE",
-        ).catch((error) => {
-          console.error("Progress reply delete failed", error.name, error.status || "");
-        });
     };
     // Channel messages cannot be ephemeral (flags 64 is interaction-only), so the
     // gateway deletes this public result after RESULT_TTL.
