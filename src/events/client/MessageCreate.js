@@ -48,26 +48,38 @@ export async function messageCreate(message, env, openStore = withStore) {
     if (!(await store.claimInteraction(`message:${message.id}`))) return;
     let responseId;
     const respond = async (text) => {
-      const content = `<@${message.author.id}> ${text}`;
-      const allowed_mentions = { parse: [], users: [message.author.id] };
+      const componentMessage = text && typeof text === "object";
+      const payload = componentMessage
+        ? { ...text, allowed_mentions: { parse: [] } }
+        : {
+            content: `<@${message.author.id}> ${text}`,
+            allowed_mentions: { parse: [], users: [message.author.id] },
+          };
+      if (componentMessage && responseId) {
+        await discord(
+          env,
+          `/channels/${message.channel_id}/messages/${responseId}`,
+          "DELETE",
+        );
+        responseId = undefined;
+      }
       if (responseId)
         return discord(
           env,
           `/channels/${message.channel_id}/messages/${responseId}`,
           "PATCH",
-          { content, allowed_mentions },
+          payload,
         );
       const response = await discord(
         env,
         `/channels/${message.channel_id}/messages`,
         "POST",
         {
-          content,
+          ...payload,
           message_reference: {
             message_id: message.id,
             fail_if_not_exists: false,
           },
-          allowed_mentions,
           nonce: `m:${message.id}`,
           enforce_nonce: true,
         },
@@ -155,7 +167,7 @@ async function verifyMessage(message, env, store, settings, respond) {
       scan,
       direct: true,
     });
-    return result.content;
+    return result?.flags & 32768 ? result : result.content;
   } catch (error) {
     const reason = failureReason(step, error);
     console.error("Direct screenshot verification failed", reason);

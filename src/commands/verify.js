@@ -38,6 +38,12 @@ import {
   channelLink,
 } from "../components/index.js";
 import {
+  componentV2,
+  container,
+  section,
+  thumbnail,
+} from "../components/v2.js";
+import {
   screenshotInput,
   screenshotFile,
   postScreenshot,
@@ -52,8 +58,22 @@ const openChannel = (config) =>
   });
 
 // granted is false only when the policy still needs the other platform.
-function passed(granted, platform) {
-  if (granted) return "✅ **Passed!** Your access role has been granted.";
+function passed(granted, platform, user, direct = false) {
+  if (granted) {
+    const avatar = user.avatar
+      ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`
+      : `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(user.id) >> 22n) % 6n)}.png`;
+    const response = componentV2(
+      container(
+        section(
+          "## ✅ Verification Passed\n-# Thanks for supporting our server!\nCongratulations, you have passed verification and received your role.\n\nIf you don't see the role, run **/verification-status** to check and retry the role assignment.",
+          thumbnail(avatar),
+        ),
+      ),
+    );
+    if (!direct) response.flags |= 64;
+    return response;
+  }
   return platform === "youtube"
     ? "✅ **YouTube passed!** Now send your TikTok follow screenshot to get the role."
     : "✅ **TikTok passed!** Now send your YouTube subscription screenshot to get the role.";
@@ -104,7 +124,12 @@ export async function execute(interaction, config, store, prepared = {}) {
       (!record[`${platform}_target`] ||
         record[`${platform}_target`] === target(config, platform))
     )
-      return { content: passed(await grant(config, store, user), platform) };
+      return passed(
+        await grant(config, store, user),
+        platform,
+        interaction.member.user,
+        prepared.direct,
+      );
     const channel = await discord(
       config,
       `/channels/${config.REVIEW_CHANNEL_ID}`,
@@ -187,9 +212,12 @@ export async function execute(interaction, config, store, prepared = {}) {
               allowed_mentions: { parse: [] },
             },
           ).catch(() => {});
-          return {
-            content: passed(await grant(config, store, user), platform),
-          };
+          return passed(
+            await grant(config, store, user),
+            platform,
+            interaction.member.user,
+            prepared.direct,
+          );
         }
       } else {
         await discord(
