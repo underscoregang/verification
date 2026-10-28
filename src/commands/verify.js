@@ -1,42 +1,47 @@
 export const data = {
-  "name": "verify",
-  "description": "Upload a subscription or follow screenshot for staff review",
-  "type": 1,
-  "options": [
+  name: "verify",
+  description: "Upload a subscription or follow screenshot for staff review",
+  type: 1,
+  options: [
     {
-      "name": "platform",
-      "description": "Account shown in your screenshot",
-      "type": 3,
-      "choices": [
+      name: "platform",
+      description: "Account shown in your screenshot",
+      type: 3,
+      choices: [
         {
-          "name": "YouTube",
-          "value": "youtube"
+          name: "YouTube",
+          value: "youtube",
         },
         {
-          "name": "TikTok",
-          "value": "tiktok"
-        }
-      ]
+          name: "TikTok",
+          value: "tiktok",
+        },
+      ],
     },
     {
-      "name": "screenshot",
-      "description": "PNG, JPG or WebP image (maximum 8 MB)",
-      "type": 11
+      name: "screenshot",
+      description: "PNG, JPG or WebP image (maximum 8 MB)",
+      type: 11,
     },
-    {
-      "name": "username",
-      "description": "Your YouTube or TikTok username shown in the screenshot",
-      "type": 3,
-      "max_length": 100
-    }
-  ]
+  ],
 };
 
-import { scanScreenshot } from '../services/image-scan.js';
-import { discord } from '../discord/client.js';
-import { grant } from '../discord/roles.js';
-import { row, button, choices, enabled, target, channelLink } from '../components/index.js';
-import { screenshotInput, screenshotFile, postScreenshot } from '../services/screenshots.js';
+import { scanScreenshot } from "../services/image-scan.js";
+import { discord } from "../discord/client.js";
+import { grant } from "../discord/roles.js";
+import {
+  row,
+  button,
+  choices,
+  enabled,
+  target,
+  channelLink,
+} from "../components/index.js";
+import {
+  screenshotInput,
+  screenshotFile,
+  postScreenshot,
+} from "../services/screenshots.js";
 
 const openChannel = (config) =>
   row({
@@ -55,7 +60,8 @@ function passed(granted, platform) {
 }
 
 export async function execute(interaction, config, store, prepared = {}) {
-  const user = interaction.member.user.id, data = interaction.data;
+  const user = interaction.member.user.id,
+    data = interaction.data;
   if (
     interaction.type === 2 &&
     data.name === "verify" &&
@@ -112,7 +118,7 @@ export async function execute(interaction, config, store, prepared = {}) {
       interaction.id,
       user,
       platform,
-      input.username,
+      null,
       input.attachment,
       target(config, platform),
       config.REVIEW_CHANNEL_ID,
@@ -123,7 +129,7 @@ export async function execute(interaction, config, store, prepared = {}) {
           "You already have a pending screenshot. Please wait for staff review before submitting another.",
       };
     try {
-      const file = prepared.file || await screenshotFile(input.attachment);
+      const file = prepared.file || (await screenshotFile(input.attachment));
       const creator =
         platform === "youtube"
           ? `https://www.youtube.com/channel/${review.target}`
@@ -132,7 +138,7 @@ export async function execute(interaction, config, store, prepared = {}) {
         config,
         config.REVIEW_CHANNEL_ID,
         {
-          content: `**${platform === "youtube" ? "YouTube" : "TikTok"} screenshot review**\nMember: <@${user}>\nAccount: ${prepared.direct ? 'not supplied (direct screenshot upload)' : '@' + input.username}\nRequired creator: ${creator}\nAutomatic image check in progress. Uncertain evidence needs staff review. Screenshots cannot prove account ownership.`,
+          content: `**${platform === "youtube" ? "YouTube" : "TikTok"} screenshot review**\nMember: <@${user}>\nRequired creator: ${creator}\nAutomatic image check in progress. Uncertain evidence needs staff review. Screenshots cannot prove account ownership.`,
           embeds: [
             {
               color: 0x8b5cf6,
@@ -155,22 +161,46 @@ export async function execute(interaction, config, store, prepared = {}) {
         file,
       );
       await store.attachReview(review.id, sent.id, sent.attachments?.[0]?.url);
-      const scan = prepared.scan || await scanScreenshot(config, platform, file);
-      await store.db.collection('reviews').updateOne({ _id: review.id }, { $set: { scan: { ...scan, checked_at: new Date() } } });
+      const scan =
+        prepared.scan || (await scanScreenshot(config, platform, file));
+      await store.db
+        .collection("reviews")
+        .updateOne(
+          { _id: review.id },
+          { $set: { scan: { ...scan, checked_at: new Date() } } },
+        );
       if (scan.approved) {
-        const decided = await store.decideReview(review.id, config.DISCORD_CLIENT_ID, true, 'image-scan:' + review.id);
+        const decided = await store.decideReview(
+          review.id,
+          config.DISCORD_CLIENT_ID,
+          true,
+          "image-scan:" + review.id,
+        );
         if (decided) {
-          await discord(config, `/channels/${config.REVIEW_CHANNEL_ID}/messages/${sent.id}`, 'PATCH', {
-            content: `**Automatically approved** screenshot from <@${user}>. Exact creator handle and subscription/follow state matched. Screenshot checks do not prove account ownership.`,
-            components: [], allowed_mentions: { parse: [] },
-          }).catch(() => {});
-          return { content: passed(await grant(config, store, user), platform) };
+          await discord(
+            config,
+            `/channels/${config.REVIEW_CHANNEL_ID}/messages/${sent.id}`,
+            "PATCH",
+            {
+              content: `**Automatically approved** screenshot from <@${user}>. Exact creator handle and subscription/follow state matched. Screenshot checks do not prove account ownership.`,
+              components: [],
+              allowed_mentions: { parse: [] },
+            },
+          ).catch(() => {});
+          return {
+            content: passed(await grant(config, store, user), platform),
+          };
         }
       } else {
-        await discord(config, `/channels/${config.REVIEW_CHANNEL_ID}/messages/${sent.id}`, 'PATCH', {
-          content: `**Staff review needed** for <@${user}> (${platform}). Claimed account: @${input.username}. Check: ${scan.reason}. Please inspect the creator and subscription/follow state before approving.`,
-          allowed_mentions: { parse: [] },
-        }).catch(() => {});
+        await discord(
+          config,
+          `/channels/${config.REVIEW_CHANNEL_ID}/messages/${sent.id}`,
+          "PATCH",
+          {
+            content: `**Staff review needed** for <@${user}> (${platform}). Check: ${scan.reason}. Please inspect the creator and subscription/follow state before approving.`,
+            allowed_mentions: { parse: [] },
+          },
+        ).catch(() => {});
       }
     } catch (error) {
       await store.failReview(review.id);
@@ -181,5 +211,4 @@ export async function execute(interaction, config, store, prepared = {}) {
         "🕵️ **Sent to staff review.** I couldn't confirm your screenshot automatically, so a staff member will check it. You'll get the role once it's approved, so there's no need to send it again.",
     };
   }
-
 }
