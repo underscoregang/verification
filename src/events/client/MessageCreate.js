@@ -76,7 +76,9 @@ export async function messageCreate(message, env, openStore = withStore) {
     };
     // Channel messages cannot be ephemeral (flags 64 is interaction-only), so the
     // gateway deletes this public result after RESULT_TTL.
-    await respond(await verifyMessage(message, env, store, settings, respond)).catch((error) => {
+    await respond(
+      await verifyMessage(message, env, store, settings, respond),
+    ).catch((error) => {
       console.error("Result reply failed", error.name, error.status || "");
     });
     // The review channel keeps its own copy, so remove the member's screenshot here.
@@ -91,7 +93,9 @@ export async function messageCreate(message, env, openStore = withStore) {
         error.status || "",
       );
     });
-    return responseId && { channelId: message.channel_id, messageId: responseId };
+    return (
+      responseId && { channelId: message.channel_id, messageId: responseId }
+    );
   });
 }
 
@@ -131,7 +135,7 @@ async function verifyMessage(message, env, store, settings, respond) {
         scan = await scanScreenshot(config, platform, file);
       } else if (!scan.platform) {
         // Never guess a platform or award a role when the scanner cannot read it.
-        return "❌ **Failed.** I couldn't tell whether this is a YouTube or TikTok screenshot. Please send a clear screenshot of the creator's page showing Subscribed or Following.";
+        return "❌ **Failed.** I couldn't identify the platform automatically. Your screenshot appears to be a YouTube channel page; please use `/verify` and select **YouTube**, then attach this screenshot so it can be checked for your creator's handle and **Subscribed** status. If it is TikTok, select **TikTok** and show **Following**.";
       }
     }
     if (
