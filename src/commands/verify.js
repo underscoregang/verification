@@ -57,7 +57,7 @@ const openChannel = (config) =>
     url: channelLink(config),
   });
 
-// granted is false only when the policy still needs the other platform.
+// Keep policy progress separate from whether Discord actually accepted the role.
 function passed(granted, platform, user, direct = false) {
   if (granted) {
     const avatar = user.avatar
@@ -66,7 +66,7 @@ function passed(granted, platform, user, direct = false) {
     const response = componentV2(
       container(
         section(
-          "## ✅ Verification Passed\n-# Thanks for supporting our server!\nCongratulations, you have passed verification and received your role.\n\nIf you don't see the role, run **/verification-status** to check and retry the role assignment.",
+          "## ✅ Verification Passed\n-# Thanks for supporting our server!\nCongratulations, you passed verification and your access role is assigned.\n\nIf you don't see the role, run **/verification-status** to check and retry the role assignment.",
           thumbnail(avatar),
         ),
       ),
@@ -123,13 +123,14 @@ export async function execute(interaction, config, store, prepared = {}) {
       record?.[platform] &&
       (!record[`${platform}_target`] ||
         record[`${platform}_target`] === target(config, platform))
-    )
-      return passed(
-        await grant(config, store, user),
-        platform,
-        interaction.member.user,
-        prepared.direct,
-      );
+    ) {
+      const granted = await grant(config, store, user);
+      return granted
+        ? passed(true, platform, interaction.member.user, prepared.direct)
+        : {
+            content: `Your ${platform} verification passed, but the access role could not be assigned. Run **/verification-status** to retry, or contact staff if it still fails.`,
+          };
+    }
     const channel = await discord(
       config,
       `/channels/${config.REVIEW_CHANNEL_ID}`,
@@ -212,12 +213,12 @@ export async function execute(interaction, config, store, prepared = {}) {
               allowed_mentions: { parse: [] },
             },
           ).catch(() => {});
-          return passed(
-            await grant(config, store, user),
-            platform,
-            interaction.member.user,
-            prepared.direct,
-          );
+          const granted = await grant(config, store, user);
+          return granted
+            ? passed(true, platform, interaction.member.user, prepared.direct)
+            : {
+                content: `Your ${platform} verification passed, but the access role could not be assigned. Run **/verification-status** to retry, or contact staff if it still fails.`,
+              };
         }
       } else {
         await discord(

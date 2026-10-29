@@ -8,13 +8,24 @@
   "ai": { "binding": "AI", "remote": true },
   // MongoDB's connection-string parser only needs the native URL class.
   "alias": { "whatwg-url": "./src/shims/whatwg-url.js" },
-  "durable_objects": { "bindings": [{ "name": "DISCORD_GATEWAY", "class_name": "DiscordGateway" }] },
-  "migrations": [{ "tag": "gateway-v1", "new_sqlite_classes": ["DiscordGateway"] }],
+  "durable_objects": {
+    "bindings": [{ "name": "DISCORD_GATEWAY", "class_name": "DiscordGateway" }],
+  },
+  "migrations": [
+    { "tag": "gateway-v1", "new_sqlite_classes": ["DiscordGateway"] },
+  ],
   "routes": [
-    { "pattern": "verification.underscoregang.xyz", "zone_name": "underscoregang.xyz", "custom_domain": true }
+    {
+      "pattern": "verification.underscoregang.xyz",
+      "zone_name": "underscoregang.xyz",
+      "custom_domain": true,
+    },
   ],
   // Upload configuration from .env with npm run secrets:upload.
   // Keep credentials out of this file.
   "triggers": { "crons": ["17 * * * *"] },
-  "observability": { "enabled": false }
+  "observability": { "enabled": false },
+  "vars": {
+    "VERIFICATION_POLICY": "youtube",
+  },
 }

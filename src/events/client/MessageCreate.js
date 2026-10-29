@@ -75,7 +75,7 @@ export async function messageCreate(message, env, openStore = withStore) {
             `/channels/${message.channel_id}/messages/${responseId}`,
             "PATCH",
             {
-              content: `<@${message.author.id}> ✅ Verification passed! Your access role has been granted. If you don't see it, run /verification-status.`,
+              content: `<@${message.author.id}> ✅ The verification result could not be displayed. Run /verification-status to check your access role.`,
               components: [],
               allowed_mentions: { parse: [], users: [message.author.id] },
             },
