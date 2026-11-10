@@ -4,12 +4,16 @@ import { target, outcome, reviewCard } from "../components/index.js";
 import { postScreenshot } from "./screenshots.js";
 
 // grant() gives the access role (and removes the /getrole remove-role, when set).
-// It is false only while the policy still needs another platform; a failed role
-// assignment throws, so false means this platform passed on its own.
+// A failed role assignment throws; false means the saved approvals do not meet
+// the policy yet, which is expected only for "both" before the second platform.
 async function finish(config, store, who, platform) {
-  return (await grant(config, store, who.user.id))
-    ? outcome.passed(who)
-    : outcome.partial(who, platform);
+  if (await grant(config, store, who.user.id)) return outcome.passed(who);
+  if (config.policy === "both") return outcome.partial(who, platform);
+  console.error("Approved screenshot did not satisfy the verification policy", platform);
+  return outcome.error(
+    who,
+    "Your screenshot was approved, but the access role could not be given. Please contact staff.",
+  );
 }
 
 // Records a scanned screenshot from the submission channel, posts the staff
@@ -31,11 +35,15 @@ export async function submitScreenshot(config, store, { id, who, platform, attac
     ![0, 5].includes(channel.type)
   )
     throw new Error("Invalid review channel");
+  // The review handle becomes members.<platform> on approval, and grant() needs
+  // it to be a non-empty string. Screenshots cannot prove which social account
+  // is the member's, so the identity is the Discord member itself (unique per
+  // member, as the unique_youtube/unique_tiktok indexes require).
   const review = await store.createImageReview(
     id,
     user,
     platform,
-    null,
+    `discord_${user}`,
     attachment,
     target(config, platform),
     config.REVIEW_CHANNEL_ID,
