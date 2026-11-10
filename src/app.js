@@ -28,7 +28,7 @@ export function createWorker(openStore = withStore) {
         if (
           ["/start", "/oauth/discord", "/oauth/google"].includes(url.pathname)
         )
-          return text('Verification now uses screenshot uploads in Discord. Use /verify and upload a fresh screenshot. Google sign-in is no longer required.', 410);
+          return text('Verification now uses screenshot uploads in Discord. Post your screenshot as an image in the verification channel. Google sign-in is no longer required.', 410);
         return text("Not found", 404);
       } catch (error) {
         console.error(
@@ -37,7 +37,7 @@ export function createWorker(openStore = withStore) {
           error.status || "",
         );
         return text(
-          "Verification could not finish. Retry /verify, or /verification-status if verification was saved. Ask an administrator to check credentials, account conflicts, and role permissions.",
+          "Verification could not finish. Post your screenshot in the verification channel again. Ask an administrator to check credentials, account conflicts, and role permissions.",
           502,
         );
       }

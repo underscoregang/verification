@@ -1,46 +1,18 @@
 import { api } from "../http/client.js";
 const maxSize = 8 * 1024 * 1024;
-export function modalFields(data) {
-  return (data.components || []).flatMap((item) =>
-    item.component ? [item.component] : item.components || [],
-  );
-}
-export function screenshotInput(interaction) {
-  const fields = modalFields(interaction.data);
-  const options = interaction.data.options || [];
-  const username = (
-    fields.find((item) => item.custom_id === "username")?.value ||
-    options.find((item) => item.name === "username")?.value ||
-    ""
-  )
-    .trim()
-    .replace(/^@/, "")
-    .toLowerCase();
-  const upload = fields.find((item) => item.custom_id === "screenshot");
-  const id =
-    upload?.values?.length === 1
-      ? upload.values[0]
-      : options.find((item) => item.name === "screenshot")?.value;
-  const attachment = interaction.data.resolved?.attachments?.[id];
-  if (!/^[\p{L}\p{N}._-]{2,100}$/u.test(username))
-    return {
-      error:
-        "Enter your account username without spaces, not the channel display name.",
-    };
+const imageTypes = ["image/png", "image/jpeg", "image/webp"];
+
+// Returns a member-facing reason when a message attachment is not a usable
+// screenshot uploaded to Discord, or null when it can be downloaded and scanned.
+export function attachmentError(attachment) {
   if (
     !attachment ||
-    attachment.id !== id ||
-    !["image/png", "image/jpeg", "image/webp"].includes(
-      attachment.content_type,
-    ) ||
+    !imageTypes.includes(attachment.content_type) ||
     !Number.isInteger(attachment.size) ||
     attachment.size <= 0 ||
     attachment.size > maxSize
   )
-    return {
-      error:
-        "Attach one PNG, JPG or WebP screenshot up to 8 MB. Use the upload button or `/verify platform:youtube screenshot:<image> username:<your username>`.",
-    };
+    return "Please upload a PNG, JPG or WebP screenshot (up to 8 MB) directly to Discord.";
   try {
     const url = new URL(attachment.url);
     if (
@@ -51,11 +23,11 @@ export function screenshotInput(interaction) {
       url.password ||
       !/^\/(?:ephemeral-)?attachments\//.test(url.pathname)
     )
-      return { error: "Please upload the screenshot directly to Discord." };
+      return "Please upload the screenshot directly to Discord.";
   } catch {
-    return { error: "Please upload the screenshot directly to Discord." };
+    return "Please upload the screenshot directly to Discord.";
   }
-  return { username, attachment };
+  return null;
 }
 export async function screenshotFile(attachment) {
   const response = await fetch(attachment.url, {

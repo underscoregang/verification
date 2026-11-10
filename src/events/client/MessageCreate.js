@@ -7,31 +7,12 @@ import {
 } from "../../config/runtime.js";
 import { discord } from "../../discord/client.js";
 import { ProviderError } from "../../http/client.js";
-import { enabled } from "../../components/controls.js";
-import { screenshotFile, screenshotInput } from "../../services/screenshots.js";
+import { enabled, outcome } from "../../components/index.js";
+import { screenshotFile, attachmentError } from "../../services/screenshots.js";
 import { scanScreenshot } from "../../services/image-scan.js";
-import { execute } from "../../commands/verify.js";
+import { submitScreenshot } from "../../services/verification.js";
 
 export const RESULT_TTL = 5000;
-
-export function messageSubmission(message, platform) {
-  const attachment = message.attachments[0];
-  return {
-    id: message.id,
-    type: 2,
-    channel_id: message.channel_id,
-    member: { user: message.author, permissions: "0" },
-    data: {
-      name: "verify",
-      options: [
-        { name: "platform", value: platform },
-        { name: "username", value: `discord_${message.author.id}` },
-        { name: "screenshot", value: attachment.id },
-      ],
-      resolved: { attachments: { [attachment.id]: attachment } },
-    },
-  };
-}
 
 export async function messageCreate(message, env, openStore = withStore) {
   if (
@@ -47,62 +28,31 @@ export async function messageCreate(message, env, openStore = withStore) {
     if (message.channel_id !== settings.SUBMISSION_CHANNEL_ID) return;
     if (!(await store.claimInteraction(`message:${message.id}`))) return;
     let responseId;
-    const respond = async (text) => {
-      const componentMessage = text && typeof text === "object";
-      const payload = componentMessage
-        ? { ...text, allowed_mentions: { parse: [] } }
-        : {
-            content: `<@${message.author.id}> ${text}`,
-            allowed_mentions: { parse: [], users: [message.author.id] },
-          };
+    const who = { user: message.author, mention: true };
+    // Every reply is a Components V2 card from the first post, so the progress
+    // message can be edited into the result without switching message formats.
+    const respond = async (payload) => {
       if (responseId) {
+        const path = `/channels/${message.channel_id}/messages/${responseId}`;
         try {
-          return await discord(
-            env,
-            `/channels/${message.channel_id}/messages/${responseId}`,
-            "PATCH",
-            componentMessage ? { ...payload, content: null } : payload,
-          );
+          return await discord(env, path, "PATCH", payload);
         } catch (error) {
-          if (!componentMessage) throw error;
-          console.error(
-            "Verification card edit failed; using text result",
-            error.name,
-            error.status || "",
-          );
-          return discord(
-            env,
-            `/channels/${message.channel_id}/messages/${responseId}`,
-            "PATCH",
-            {
-              content: `<@${message.author.id}> ✅ The verification result could not be displayed. Run /verification-status to check your access role.`,
-              components: [],
-              allowed_mentions: { parse: [], users: [message.author.id] },
-            },
-          );
+          console.error("Verification card edit failed; using fallback card", error.name, error.status || "");
+          return discord(env, path, "PATCH", outcome.error(who, "The verification result could not be displayed. Send your screenshot again, or contact staff if your role is missing."));
         }
       }
-      const createPayload = {
+      const response = await discord(env, `/channels/${message.channel_id}/messages`, "POST", {
         ...payload,
-        message_reference: {
-          message_id: message.id,
-          fail_if_not_exists: false,
-        },
+        message_reference: { message_id: message.id, fail_if_not_exists: false },
         nonce: `m:${message.id}`,
         enforce_nonce: true,
-      };
-      const response = await discord(
-        env,
-        `/channels/${message.channel_id}/messages`,
-        "POST",
-        createPayload,
-      );
+      });
       responseId = response.id;
     };
     // Channel messages cannot be ephemeral (flags 64 is interaction-only), so the
     // gateway deletes this public result after RESULT_TTL.
     await respond(
-      await verifyMessage(message, env, store, settings, respond),
+      await verifyMessage(message, env, store, settings, respond, who),
     ).catch((error) => {
       console.error("Result reply failed", error.name, error.status || "");
     });
@@ -131,26 +81,22 @@ function failureReason(step, error) {
   return `${step}: ${error.name === "Error" ? error.message : error.name}`;
 }
 
-// Returns the member's result text; respond is used only for the progress message.
-async function verifyMessage(message, env, store, settings, respond) {
+// Returns the member's result card; respond is used only for the progress card.
+async function verifyMessage(message, env, store, settings, respond, who) {
   let step = "setup";
   try {
     const config = loadConfig(withSavedSettings(env, settings));
     if (message.attachments.length !== 1)
-      return "❌ **Failed.** Please send one screenshot at a time.";
-    const interaction = messageSubmission(
-      message,
-      config.policy === "tiktok" ? "tiktok" : "youtube",
-    );
-    const input = screenshotInput(interaction);
-    if (input.error)
-      return "❌ **Failed.** Please upload a PNG, JPG or WebP screenshot (up to 8 MB) directly to Discord.";
+      return outcome.failed(who, "Please send one screenshot at a time.");
+    const attachment = message.attachments[0];
+    const invalid = attachmentError(attachment);
+    if (invalid) return outcome.failed(who, invalid);
     const pending = await store.latestReview(message.author.id);
     if (pending?.status === "pending")
-      return "🕵️ Your last screenshot is still waiting for staff review. You'll get the role once it's approved, so there's no need to send it again.";
-    await respond("⏳ Processing your screenshot…");
+      return outcome.pending(who);
+    await respond(outcome.processing(who));
     step = "download";
-    const file = await screenshotFile(input.attachment);
+    const file = await screenshotFile(attachment);
     step = "scan";
     let platform = config.policy === "tiktok" ? "tiktok" : "youtube";
     let scan = await scanScreenshot(config, platform, file);
@@ -160,32 +106,26 @@ async function verifyMessage(message, env, store, settings, respond) {
         scan = await scanScreenshot(config, platform, file);
       } else if (!scan.platform) {
         // Never guess a platform or award a role when the scanner cannot read it.
-        return "❌ **Failed.** I couldn't identify the platform automatically. Your screenshot appears to be a YouTube channel page; please use `/verify` and select **YouTube**, then attach this screenshot so it can be checked for your creator's handle and **Subscribed** status. If it is TikTok, select **TikTok** and show **Following**.";
+        return outcome.failed(who, "I couldn't tell whether this is YouTube or TikTok. Send a screenshot of the creator's page that clearly shows their **@handle** and your **Subscribed** or **Following** button.");
       }
     }
     if (
       (scan.platform && !enabled(config, scan.platform)) ||
       !enabled(config, platform)
     )
-      return "❌ **Failed.** This platform isn't used for verification on this server.";
+      return outcome.failed(who, "This platform isn't used for verification on this server.");
     const action = platform === "youtube" ? "Subscribed" : "Following";
     if (scan.reason === "wrong_creator")
-      return `❌ **Failed.** This screenshot shows a different account. Please send a screenshot of **@${scan.handle}** showing **${action}**.`;
+      return outcome.failed(who, `This screenshot shows a different account. Please send a screenshot of **@${scan.handle}** showing **${action}**.`);
     if (scan.reason === "not_subscribed")
-      return `❌ **Failed.** Your screenshot doesn't show **${action}** on **@${scan.handle}** yet. ${platform === "youtube" ? "Subscribe" : "Follow"}, then send a new screenshot.`;
-    interaction.data.options[0].value = platform;
+      return outcome.failed(who, `Your screenshot doesn't show **${action}** on **@${scan.handle}** yet. ${platform === "youtube" ? "Subscribe" : "Follow"}, then send a new screenshot.`);
     step = "review";
-    const result = await execute(interaction, config, store, {
-      file,
-      scan,
-      direct: true,
-    });
-    return result?.flags & 32768 ? result : result.content;
+    return await submitScreenshot(config, store, { id: message.id, who, platform, attachment, file, scan });
   } catch (error) {
     const reason = failureReason(step, error);
     console.error("Direct screenshot verification failed", reason);
     return error instanceof ConfigurationError
-      ? configurationHelp(error.issues)
-      : `❌ **Failed.** Something went wrong while checking your image. Please try again in a moment, or contact staff if it keeps happening. (${reason})`;
+      ? outcome.error(who, configurationHelp(error.issues))
+      : outcome.error(who, `Something went wrong while checking your image. Please try again in a moment, or contact staff if it keeps happening. (${reason})`);
   }
 }

@@ -1,4 +1,4 @@
-export * from './content.js';
-export * from './controls.js';
-export * from './embed.js';
 export * from './v2.js';
+export * from './controls.js';
+export * from './panel.js';
+export * from './cards.js';

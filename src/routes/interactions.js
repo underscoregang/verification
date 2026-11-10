@@ -1,7 +1,7 @@
 import { withSavedSettings, loadConfig, ConfigurationError, configurationHelp } from "../config/runtime.js";
 import { validSignature } from "../shared/security.js";
 import { immediate, complete } from "../events/client/InteractionCreate.js";
-import { message } from "../components/index.js";
+import { message, notice } from "../components/index.js";
 import { editResponse } from "../discord/client.js";
 import { isSetup } from "../commands/shared/setup.js";
 import { text, json } from "../http/responses.js";
@@ -30,6 +30,7 @@ export async function interactions(request, env, ctx, openStore) {
     return json(
       message(
         "Core bot configuration is incomplete. Ask an administrator to run npm run setup:check.",
+        "warning",
       ),
     );
   }
@@ -60,13 +61,16 @@ export async function interactions(request, env, ctx, openStore) {
         });
       } catch (error) {
         console.error("Database or configuration operation failed", error.name);
-        await editResponse(config, interaction, {
-          content:
-            error instanceof ConfigurationError
-              ? configurationHelp(error.issues)
-              : "The verification database could not be reached or initialized. Ask the bot owner to check MongoDB connectivity and database initialization, then retry /verify.",
-          components: [],
-        }).catch(() => {});
+        await editResponse(
+          config,
+          interaction,
+          error instanceof ConfigurationError
+            ? notice(configurationHelp(error.issues), "warning")
+            : notice(
+                "The verification database could not be reached or initialized. Ask the bot owner to check MongoDB connectivity and database initialization, then retry.",
+                "danger",
+              ),
+        ).catch(() => {});
       }
     })(),
   );

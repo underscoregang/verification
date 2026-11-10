@@ -11,7 +11,7 @@ export const data = {
       "options": [
         {
           "name": "channel",
-          "description": "Channel where members submit screenshots with /verify",
+          "description": "Channel where members post their screenshots",
           "type": 7,
           "channel_types": [
             0

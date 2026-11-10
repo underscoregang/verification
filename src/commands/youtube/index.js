@@ -35,7 +35,8 @@ import { execute as setup } from './setup.js';
 import { execute as view } from './view.js';
 import { execute as help } from './help.js';
 const handlers = { setup, view, help };
+import { notice } from '../../components/v2.js';
 export async function execute(interaction, config, store) {
   const action = interaction.data.options?.find(option => option.type === 1)?.name;
-  return Object.hasOwn(handlers, action) ? handlers[action](interaction, config, store) : { content: 'Use /youtube help.' };
+  return Object.hasOwn(handlers, action) ? handlers[action](interaction, config, store) : notice('Use /youtube help.', "danger");
 }

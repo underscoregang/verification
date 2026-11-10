@@ -111,7 +111,7 @@ export function configurationHelp(issues) {
     );
   if (!guidance.length)
     guidance.push("Ask the bot owner to check the verification configuration.");
-  return `Verification setup is incomplete.\n${guidance.join("\n")}\nAfter setup, retry /verify.`;
+  return `Verification setup is incomplete.\n${guidance.join("\n")}\nAfter setup, send your screenshot again.`;
 }
 
 export function loadConfig(env, options) {

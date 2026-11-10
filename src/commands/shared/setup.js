@@ -1,3 +1,4 @@
+import { notice } from "../../components/v2.js";
 import { discord } from "../../discord/client.js";
 import { hasPermission } from "../../shared/security.js";
 import { resolveYoutube } from "../../services/youtube.js";
@@ -54,12 +55,9 @@ async function validateRole(config, interaction, id) {
 }
 export async function configure(interaction, config, store) {
   if (!setupPermission(interaction))
-    return {
-      content:
-        interaction.data.name === "getrole"
+    return notice(interaction.data.name === "getrole"
           ? "Manage Roles permission is required."
-          : "Manage Server permission is required.",
-    };
+          : "Manage Server permission is required.", "danger");
   const { name, options = [] } = interaction.data;
   const actor = interaction.member.user.id;
   if (name === "channel" && options[0]?.name === "logs") {
@@ -67,7 +65,7 @@ export async function configure(interaction, config, store) {
       (option) => option.name === "channel",
     )?.value;
     if (typeof channel !== "string" || !/^\d{17,20}$/.test(channel))
-      return { content: "Use `/channel logs channel:#bot-logs`." };
+      return notice("Use `/channel logs channel:#bot-logs`.", "danger");
     const error = await checkChannels(config, [
       {
         id: channel,
@@ -76,11 +74,9 @@ export async function configure(interaction, config, store) {
         private: true,
       },
     ]);
-    if (error) return { content: error };
+    if (error) return notice(error, "danger");
     await store.saveSetting("LOG_CHANNEL_ID", channel, actor);
-    return {
-      content: `Bot logs will be posted in <#${channel}>. This includes servers the bot joins or leaves; invites to other servers are left automatically.`,
-    };
+    return notice(`Bot logs will be posted in <#${channel}>. This includes servers the bot joins or leaves; invites to other servers are left automatically.`, "success");
   }
   if (name === "channel") {
     const fields =
@@ -96,15 +92,9 @@ export async function configure(interaction, config, store) {
         (value) => typeof value === "string" && /^\d{17,20}$/.test(value),
       )
     )
-      return {
-        content:
-          "Use `/channel setup channel:#verify review-channel:#staff-review`.",
-      };
+      return notice("Use `/channel setup channel:#verify review-channel:#staff-review`.", "danger");
     if (submission === review)
-      return {
-        content:
-          "Choose a separate private staff review channel so member screenshots are not posted publicly.",
-      };
+      return notice("Choose a separate private staff review channel so member screenshots are not posted publicly.", "danger");
     const error = await checkChannels(config, [
       {
         id: submission,
@@ -118,11 +108,9 @@ export async function configure(interaction, config, store) {
         private: true,
       },
     ]);
-    if (error) return { content: error };
+    if (error) return notice(error, "danger");
     await store.saveChannels(submission, review, actor);
-    return {
-      content: `Screenshot submissions: <#${submission}>. Staff reviews: <#${review}>.\nRun /panel in the channel where you want to post instructions. Members post screenshots directly in the submission channel; clear images are checked automatically and uncertain images go to staff.`,
-    };
+    return notice(`Screenshot submissions: <#${submission}>. Staff reviews: <#${review}>.\nRun /panel in the channel where you want to post instructions. Members post screenshots directly in the submission channel; clear images are checked automatically and uncertain images go to staff.`, "success");
   }
   if (name === "getrole") {
     const roleId = (key) => {
@@ -138,25 +126,18 @@ export async function configure(interaction, config, store) {
     };
     const id = roleId("role");
     if (!id)
-      return {
-        content: "Enter a role mention such as @Verified or a numeric role ID.",
-      };
+      return notice("Enter a role mention such as @Verified or a numeric role ID.", "danger");
     const removeGiven = options.some((option) => option.name === "remove-role");
     const removeId = removeGiven ? roleId("remove-role") : null;
     if (removeGiven && !removeId)
-      return {
-        content:
-          "Enter the role to remove as a mention such as @Unverified or a numeric role ID.",
-      };
+      return notice("Enter the role to remove as a mention such as @Unverified or a numeric role ID.", "danger");
     if (removeId === id)
-      return {
-        content: "The role to remove must be different from the role given.",
-      };
+      return notice("The role to remove must be different from the role given.", "danger");
     const error = await validateRole(config, interaction, id);
-    if (error) return { content: error };
+    if (error) return notice(error, "danger");
     if (removeId) {
       const removeError = await validateRole(config, interaction, removeId);
-      if (removeError) return { content: `Role to remove: ${removeError}` };
+      if (removeError) return notice(`Role to remove: ${removeError}`, "danger");
     }
     await store.saveSetting(
       "VERIFIED_ROLE_ID",
@@ -171,15 +152,13 @@ export async function configure(interaction, config, store) {
       actor,
       config.REMOVED_ROLE_ID,
     );
-    return {
-      content: `Verification access role saved: <@&${id}>. Members receive this role only after satisfying the verification policy. ${removeId ? `Verified members also lose <@&${removeId}>.` : "No role is removed on verification."}`,
-    };
+    return notice(`Verification access role saved: <@&${id}>. Members receive this role only after satisfying the verification policy. ${removeId ? `Verified members also lose <@&${removeId}>.` : "No role is removed on verification."}`, "success");
   }
   const subcommand = options.find(
     (option) => option.name === "setup" && option.type === 1,
   );
   if (!subcommand)
-    return { content: `Use /${name} setup to configure the creator account.` };
+    return notice(`Use /${name} setup to configure the creator account.`, "brand");
   if (name === "tiktok") {
     const raw = subcommand.options?.find(
       (option) => option.name === "username",
@@ -187,32 +166,25 @@ export async function configure(interaction, config, store) {
     const username =
       typeof raw === "string" ? raw.trim().replace(/^@/, "").toLowerCase() : "";
     if (!/^[a-z0-9._]{2,24}$/.test(username))
-      return {
-        content:
-          "Enter a TikTok username with 2–24 letters, numbers, dots, or underscores, with or without @.",
-      };
+      return notice("Enter a TikTok username with 2–24 letters, numbers, dots, or underscores, with or without @.", "danger");
     await store.saveSetting(
       "TIKTOK_USERNAME",
       username,
       actor,
       config.TIKTOK_USERNAME,
     );
-    return {
-      content: `TikTok target saved: @${username}. Clear screenshots are checked automatically; uncertain images go to staff. If the target changed, saved TikTok verification and pending reviews were reset; existing Discord roles are not removed.`,
-    };
+    return notice(`TikTok target saved: @${username}. Clear screenshots are checked automatically; uncertain images go to staff. If the target changed, saved TikTok verification and pending reviews were reset; existing Discord roles are not removed.`, "success");
   }
   const result = await resolveYoutube(
     config,
     subcommand.options?.find((option) => option.name === "channel")?.value,
   );
-  if (result.error) return { content: result.error };
+  if (result.error) return notice(result.error, "danger");
   await store.saveSetting(
     "YOUTUBE_CHANNEL_ID",
     result.id,
     actor,
     config.YOUTUBE_CHANNEL_ID,
   );
-  return {
-    content: `YouTube target saved: https://www.youtube.com/channel/${result.id}. If the target changed, saved YouTube verification was reset; existing Discord roles are not removed.`,
-  };
+  return notice(`YouTube target saved: https://www.youtube.com/channel/${result.id}. If the target changed, saved YouTube verification was reset; existing Discord roles are not removed.`, "success");
 }

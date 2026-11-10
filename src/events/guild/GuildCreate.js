@@ -1,5 +1,5 @@
 import { discord } from "../../discord/client.js";
-import { sendLog, logColors, guildFields } from "../../discord/logs.js";
+import { sendLog, guildFields } from "../../discord/logs.js";
 
 // Discord replays GUILD_CREATE for every server on each new Gateway session, so
 // only a recent joined_at means the bot was just added.
@@ -30,7 +30,7 @@ export async function guildCreate(guild, env, openStore) {
     return sendLog(
       env,
       {
-        color: logColors.success,
+        tone: "success",
         title: "Joined home server",
         fields: guildFields(guild),
       },
@@ -53,7 +53,7 @@ export async function guildCreate(guild, env, openStore) {
   return sendLog(
     env,
     {
-      color: logColors.danger,
+      tone: "danger",
       title: recentlyJoined(guild)
         ? "Invited to an unauthorized server"
         : "Found in an unauthorized server",
@@ -65,7 +65,6 @@ export async function guildCreate(guild, env, openStore) {
         {
           name: "Added by",
           value: inviter || "Unknown (no audit log access)",
-          inline: true,
         },
       ],
     },

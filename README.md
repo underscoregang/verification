@@ -12,7 +12,9 @@ It runs on Cloudflare Workers with MongoDB. It is not a public bot: it serves on
 2. Take a screenshot that shows the creator's **@handle** and **Subscribed** or **Following**.
 3. Post it as a normal image in the verification channel.
 
-The bot replies with **⏳ Processing your screenshot…**, deletes the screenshot, then shows the result and deletes that reply after 5 seconds, so the channel stays empty:
+All bot messages use Discord [Components V2](https://discord.com/developers/docs/components/reference) (containers, sections, text displays and media galleries) instead of plain text and embeds.
+
+The bot replies with a **⏳ Checking your screenshot** card, deletes the screenshot, then updates the card with the result and deletes that reply after 5 seconds, so the channel stays empty:
 
 | Result | Meaning |
 | --- | --- |
@@ -20,15 +22,13 @@ The bot replies with **⏳ Processing your screenshot…**, deletes the screensh
 | ❌ **Failed** | The image clearly shows another account or no subscription/follow, or the file is not a usable image. The member can send a new screenshot right away. |
 | 🕵️ **Sent to staff review** | The image could not be read clearly. Staff approve or reject it in the private review channel. |
 
-Members can also use `/verify` to upload a screenshot privately, and `/help` to see these instructions. PNG, JPG and WebP files up to **8 MB** are accepted.
+When a member passes, the bot gives the `/getrole` access role and, if one is set, removes the `remove-role` (for example `@Unverified`). A member who already passed but is missing the role can send the screenshot again and the bot retries the role. Members can use `/help` to see these instructions. PNG, JPG and WebP files up to **8 MB** are accepted.
 
 ## Commands
 
 | Command | Who | What it does |
 | --- | --- | --- |
 | `/help` | Everyone | How to get verified. Staff also see the setup commands. |
-| `/verify` | Everyone | Upload a screenshot privately instead of posting it. |
-| `/verification-status` | Everyone | Show approval status and retry granting the role. |
 | `/channel setup` | Manage Server | Choose the verification channel and the private staff review channel. |
 | `/channel logs` | Manage Server | Choose the private channel for bot logs. |
 | `/getrole` | Manage Roles | Choose the role given after verification, and optionally a role removed (`remove-role:@Unverified`). |

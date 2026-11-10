@@ -1,12 +1,12 @@
-import * as command0 from './channel.js';
-import * as command1 from './panel.js';
-import * as command2 from './tiktok/index.js';
-import * as command3 from './youtube/index.js';
-import * as command4 from './getrole.js';
-import * as command5 from './verify.js';
-import * as command6 from './verification-status.js';
-import * as command7 from './verification-panel.js';
-import * as command8 from './help.js';
-const modules = [command0, command1, command2, command3, command4, command5, command6, command7, command8];
+import * as channel from './channel.js';
+import * as panel from './panel.js';
+import * as tiktok from './tiktok/index.js';
+import * as youtube from './youtube/index.js';
+import * as getrole from './getrole.js';
+import * as verificationPanel from './verification-panel.js';
+import * as help from './help.js';
+// Members verify by posting a screenshot in the submission channel, so there are
+// no member commands besides /help. `npm run register` replaces the whole set.
+const modules = [channel, panel, tiktok, youtube, getrole, verificationPanel, help];
 export const commands = modules.map(command => command.data);
 export const commandHandlers = new Map(modules.map(command => [command.data.name, command.execute]));

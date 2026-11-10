@@ -18,7 +18,7 @@ export const data = {
 
 import { hasPermission } from '../shared/security.js';
 import { discord } from '../discord/client.js';
-import { panel } from '../components/index.js';
+import { panel, notice } from '../components/index.js';
 import { checkChannels } from '../discord/channels.js';
 
 export async function execute(interaction, config, store) {
@@ -28,7 +28,7 @@ export async function execute(interaction, config, store) {
     ["panel", "verification-panel"].includes(data.name)
   ) {
     if (!hasPermission(interaction.member.permissions, 32n))
-      return { content: "Manage Server permission is required." };
+      return notice("Manage Server permission is required.", "danger");
     const channelId =
       data.options?.find((option) => option.name === "channel")?.value ||
       interaction.channel_id;
@@ -39,15 +39,13 @@ export async function execute(interaction, config, store) {
         label: "View Channel, Send Messages and Embed Links",
       },
     ]);
-    if (error) return { content: error };
+    if (error) return notice(error, "danger");
     await discord(config, `/channels/${channelId}/messages`, "POST", {
       ...panel(config, channelId),
       nonce: interaction.id,
       enforce_nonce: true,
     });
-    return {
-      content: `Verification panel posted in <#${channelId}>. Members submit screenshots in <#${config.SUBMISSION_CHANNEL_ID}>.`,
-    };
+    return notice(`Verification panel posted in <#${channelId}>. Members submit screenshots in <#${config.SUBMISSION_CHANNEL_ID}>.`, "success");
   }
 
 }

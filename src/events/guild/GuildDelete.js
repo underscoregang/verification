@@ -1,4 +1,4 @@
-import { sendLog, logColors, guildFields } from "../../discord/logs.js";
+import { sendLog, guildFields } from "../../discord/logs.js";
 
 // guild merges the GUILD_DELETE payload with details cached at GUILD_CREATE.
 export async function guildDelete(guild, env, openStore) {
@@ -12,7 +12,7 @@ export async function guildDelete(guild, env, openStore) {
   return sendLog(
     env,
     {
-      color: logColors.warning,
+      tone: "warning",
       title: "Left server",
       description: guild.autoLeave
         ? "Left automatically because this server is not authorized."

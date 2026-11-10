@@ -1,5 +1,5 @@
 import { hasPermission } from '../shared/security.js';
-import { container, textDisplay } from '../components/v2.js';
+import { v2, container, textDisplay, separator } from '../components/v2.js';
 
 export const data = {
   "name": "help",
@@ -18,9 +18,7 @@ const memberHelp = `## Underscore Verifier help
 ❌ **Failed**: follow the reason in the reply, then send a new screenshot.
 🕵️ **Staff review**: the image was unclear, so staff will check it. No need to send it again.
 
-**Commands**
-\`/verify\`: upload a screenshot privately instead of posting it
-\`/help\`: show this help`;
+Already passed but missing the role? Send your screenshot again and the bot retries the role.`;
 
 const staffHelp = `### Staff commands
 \`/channel setup\`: choose the verification and private staff review channels
@@ -35,11 +33,13 @@ Staff approve or reject unclear screenshots with the buttons in the review chann
 export function helpMessage(interaction) {
   const staff = hasPermission(interaction.member?.permissions, 32n) ||
     hasPermission(interaction.member?.permissions, 268435456n);
-  return {
-    flags: 64 | 32768,
-    components: [container(textDisplay(memberHelp), ...(staff ? [textDisplay(staffHelp)] : []))],
-    allowed_mentions: { parse: [] },
-  };
+  return v2(
+    container([
+      textDisplay(memberHelp),
+      ...(staff ? [separator(), textDisplay(staffHelp)] : []),
+    ]),
+    { ephemeral: true },
+  );
 }
 
 export async function execute(interaction) {
